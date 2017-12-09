@@ -31,7 +31,6 @@ import io.druid.data.input.impl.SpatialDimensionSchema;
 import io.druid.java.util.common.DateTimes;
 import io.druid.java.util.common.Intervals;
 import io.druid.java.util.common.granularity.Granularities;
-import io.druid.segment.writeout.SegmentWriteOutMediumFactory;
 import io.druid.query.Druids;
 import io.druid.query.FinalizeResultsQueryRunner;
 import io.druid.query.QueryPlus;
@@ -57,7 +56,6 @@ import org.junit.runners.Parameterized;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
@@ -68,6 +66,8 @@ import java.util.Random;
 @RunWith(Parameterized.class)
 public class IndexMergerV9WithSpatialIndexTest
 {
+  private static IndexMergerV9 INDEX_MERGER_V9 = TestHelper.getTestIndexMergerV9();
+  private static IndexIO INDEX_IO = TestHelper.getTestIndexIO();
 
   public static final int NUM_POINTS = 5000;
   private static Interval DATA_INTERVAL = Intervals.of("2013-01-01/2013-01-07");
@@ -82,20 +82,23 @@ public class IndexMergerV9WithSpatialIndexTest
   @Parameterized.Parameters
   public static Collection<?> constructorFeeder() throws IOException
   {
-    List<Object[]> argumentArrays = new ArrayList<>();
-    for (SegmentWriteOutMediumFactory segmentWriteOutMediumFactory : SegmentWriteOutMediumFactory.builtInFactories()) {
-      IndexMergerV9 indexMergerV9 = TestHelper.getTestIndexMergerV9(segmentWriteOutMediumFactory);
-      IndexIO indexIO = TestHelper.getTestIndexIO(segmentWriteOutMediumFactory);
-
-      final IndexSpec indexSpec = new IndexSpec();
-      final IncrementalIndex rtIndex = makeIncrementalIndex();
-      final QueryableIndex mMappedTestIndex = makeQueryableIndex(indexSpec, indexMergerV9, indexIO);
-      final QueryableIndex mergedRealtimeIndex = makeMergedQueryableIndex(indexSpec, indexMergerV9, indexIO);
-      argumentArrays.add(new Object[] {new IncrementalIndexSegment(rtIndex, null)});
-      argumentArrays.add(new Object[] {new QueryableIndexSegment(null, mMappedTestIndex)});
-      argumentArrays.add(new Object[] {new QueryableIndexSegment(null, mergedRealtimeIndex)});
-    }
-    return argumentArrays;
+    final IndexSpec indexSpec = new IndexSpec();
+    final IncrementalIndex rtIndex = makeIncrementalIndex();
+    final QueryableIndex mMappedTestIndex = makeQueryableIndex(indexSpec);
+    final QueryableIndex mergedRealtimeIndex = makeMergedQueryableIndex(indexSpec);
+    return Arrays.asList(
+        new Object[][]{
+            {
+                new IncrementalIndexSegment(rtIndex, null)
+            },
+            {
+                new QueryableIndexSegment(null, mMappedTestIndex)
+            },
+            {
+                new QueryableIndexSegment(null, mergedRealtimeIndex)
+            }
+        }
+    );
   }
 
   private static IncrementalIndex makeIncrementalIndex() throws IOException
@@ -252,8 +255,7 @@ public class IndexMergerV9WithSpatialIndexTest
     return theIndex;
   }
 
-  private static QueryableIndex makeQueryableIndex(IndexSpec indexSpec, IndexMergerV9 indexMergerV9, IndexIO indexIO)
-      throws IOException
+  private static QueryableIndex makeQueryableIndex(IndexSpec indexSpec) throws IOException
   {
     IncrementalIndex theIndex = makeIncrementalIndex();
     File tmpFile = File.createTempFile("billy", "yay");
@@ -261,19 +263,15 @@ public class IndexMergerV9WithSpatialIndexTest
     tmpFile.mkdirs();
 
     try {
-      indexMergerV9.persist(theIndex, tmpFile, indexSpec, null);
-      return indexIO.loadIndex(tmpFile);
+      INDEX_MERGER_V9.persist(theIndex, tmpFile, indexSpec);
+      return INDEX_IO.loadIndex(tmpFile);
     }
     finally {
       FileUtils.deleteDirectory(tmpFile);
     }
   }
 
-  private static QueryableIndex makeMergedQueryableIndex(
-      IndexSpec indexSpec,
-      IndexMergerV9 indexMergerV9,
-      IndexIO indexIO
-  )
+  private static QueryableIndex makeMergedQueryableIndex(IndexSpec indexSpec)
   {
     try {
       IncrementalIndex first = new IncrementalIndex.Builder()
@@ -495,23 +493,22 @@ public class IndexMergerV9WithSpatialIndexTest
       thirdFile.mkdirs();
       mergedFile.mkdirs();
 
-      indexMergerV9.persist(first, DATA_INTERVAL, firstFile, indexSpec, null);
-      indexMergerV9.persist(second, DATA_INTERVAL, secondFile, indexSpec, null);
-      indexMergerV9.persist(third, DATA_INTERVAL, thirdFile, indexSpec, null);
+      INDEX_MERGER_V9.persist(first, DATA_INTERVAL, firstFile, indexSpec);
+      INDEX_MERGER_V9.persist(second, DATA_INTERVAL, secondFile, indexSpec);
+      INDEX_MERGER_V9.persist(third, DATA_INTERVAL, thirdFile, indexSpec);
 
       try {
-        QueryableIndex mergedRealtime = indexIO.loadIndex(
-            indexMergerV9.mergeQueryableIndex(
+        QueryableIndex mergedRealtime = INDEX_IO.loadIndex(
+            INDEX_MERGER_V9.mergeQueryableIndex(
                 Arrays.asList(
-                    indexIO.loadIndex(firstFile),
-                    indexIO.loadIndex(secondFile),
-                    indexIO.loadIndex(thirdFile)
+                    INDEX_IO.loadIndex(firstFile),
+                    INDEX_IO.loadIndex(secondFile),
+                    INDEX_IO.loadIndex(thirdFile)
                 ),
                 true,
                 METRIC_AGGS,
                 mergedFile,
-                indexSpec,
-                null
+                indexSpec
             )
         );
         return mergedRealtime;

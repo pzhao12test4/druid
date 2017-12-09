@@ -21,7 +21,6 @@ package io.druid.segment.data;
 
 import com.google.common.base.Function;
 import com.google.common.collect.Iterables;
-import io.druid.java.util.common.io.Closer;
 import io.druid.segment.CompressedVSizeIndexedSupplier;
 import org.junit.After;
 import org.junit.Assert;
@@ -41,7 +40,6 @@ import java.util.List;
  */
 public class CompressedVSizeIndexedSupplierTest
 {
-  private Closer closer;
   protected List<int[]> vals;
 
   protected WritableSupplier<IndexedMultivalue<IndexedInts>> indexedSupplier;
@@ -49,7 +47,6 @@ public class CompressedVSizeIndexedSupplierTest
   @Before
   public void setUpSimple()
   {
-    closer = Closer.create();
     vals = Arrays.asList(
         new int[1],
         new int[]{1, 2, 3, 4, 5},
@@ -68,20 +65,16 @@ public class CompressedVSizeIndexedSupplierTest
                 return VSizeIndexedInts.fromArray(input, 20);
               }
             }
-        ),
-        20,
-        ByteOrder.nativeOrder(),
-        CompressionStrategy.LZ4,
-        closer
+        ), 20, ByteOrder.nativeOrder(),
+        CompressedObjectStrategy.CompressionStrategy.LZ4
     );
   }
 
   @After
-  public void teardown() throws IOException
+  public void teardown()
   {
     indexedSupplier = null;
     vals = null;
-    closer.close();
   }
 
   @Test
@@ -94,7 +87,7 @@ public class CompressedVSizeIndexedSupplierTest
   public void testSerde() throws IOException
   {
     final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-    indexedSupplier.writeTo(Channels.newChannel(baos), null);
+    indexedSupplier.writeToChannel(Channels.newChannel(baos));
 
     final byte[] bytes = baos.toByteArray();
     Assert.assertEquals(indexedSupplier.getSerializedSize(), bytes.length);
@@ -146,7 +139,8 @@ public class CompressedVSizeIndexedSupplierTest
   {
     return CompressedVSizeIndexedSupplier.fromByteBuffer(
         buffer,
-        ByteOrder.nativeOrder()
+        ByteOrder.nativeOrder(),
+        null
     );
   }
 }

@@ -26,13 +26,11 @@ import io.druid.indexing.common.TaskStatus;
 import io.druid.indexing.common.TaskToolbox;
 import io.druid.indexing.common.actions.SegmentListUsedAction;
 import io.druid.java.util.common.DateTimes;
-import io.druid.segment.writeout.SegmentWriteOutMediumFactory;
 import io.druid.query.aggregation.AggregatorFactory;
 import io.druid.segment.IndexSpec;
 import io.druid.timeline.DataSegment;
 import org.joda.time.Interval;
 
-import javax.annotation.Nullable;
 import java.util.List;
 import java.util.Map;
 
@@ -45,8 +43,6 @@ public class SameIntervalMergeTask extends AbstractFixedIntervalTask
   private final List<AggregatorFactory> aggregators;
   private final Boolean rollup;
   private final IndexSpec indexSpec;
-  @Nullable
-  private final SegmentWriteOutMediumFactory segmentWriteOutMediumFactory;
 
   public SameIntervalMergeTask(
       @JsonProperty("id") String id,
@@ -58,7 +54,6 @@ public class SameIntervalMergeTask extends AbstractFixedIntervalTask
       // This parameter is left for compatibility when reading existing JSONs, to be removed in Druid 0.12.
       @SuppressWarnings("unused")
       @JsonProperty("buildV9Directly") Boolean buildV9Directly,
-      @JsonProperty("segmentWriteOutMediumFactory") @Nullable SegmentWriteOutMediumFactory segmentWriteOutMediumFactory,
       @JsonProperty("context") Map<String, Object> context
   )
   {
@@ -71,7 +66,6 @@ public class SameIntervalMergeTask extends AbstractFixedIntervalTask
     this.aggregators = Preconditions.checkNotNull(aggregators, "null aggregations");
     this.rollup = rollup == null ? Boolean.TRUE : rollup;
     this.indexSpec = indexSpec == null ? new IndexSpec() : indexSpec;
-    this.segmentWriteOutMediumFactory = segmentWriteOutMediumFactory;
   }
 
   @JsonProperty("aggregations")
@@ -136,7 +130,6 @@ public class SameIntervalMergeTask extends AbstractFixedIntervalTask
         aggregators,
         rollup,
         indexSpec,
-        segmentWriteOutMediumFactory,
         getContext()
     );
     final TaskStatus status = mergeTask.run(toolbox);
@@ -148,14 +141,13 @@ public class SameIntervalMergeTask extends AbstractFixedIntervalTask
 
   public static class SubTask extends MergeTask
   {
-    private SubTask(
+    public SubTask(
         String baseId,
         String dataSource,
         List<DataSegment> segments,
         List<AggregatorFactory> aggregators,
         Boolean rollup,
         IndexSpec indexSpec,
-        @Nullable SegmentWriteOutMediumFactory segmentWriteOutMediumFactory,
         Map<String, Object> context
     )
     {
@@ -167,7 +159,6 @@ public class SameIntervalMergeTask extends AbstractFixedIntervalTask
           rollup,
           indexSpec,
           true,
-          segmentWriteOutMediumFactory,
           context
       );
     }

@@ -96,7 +96,6 @@ public interface DimensionSelector extends ColumnValueSelector, HotLoopCallee
    * @return the field name for the given id
    */
   @CalledFromHotLoop
-  @Nullable
   String lookupName(int id);
 
   /**

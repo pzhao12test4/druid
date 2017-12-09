@@ -31,9 +31,7 @@ import io.druid.data.input.impl.LongDimensionSchema;
 import io.druid.data.input.impl.StringDimensionSchema;
 import io.druid.hll.HyperLogLogHash;
 import io.druid.java.util.common.ISE;
-import io.druid.java.util.common.granularity.Granularity;
 import io.druid.java.util.common.logger.Logger;
-import io.druid.segment.writeout.OffHeapMemorySegmentWriteOutMediumFactory;
 import io.druid.query.aggregation.AggregatorFactory;
 import io.druid.query.aggregation.hyperloglog.HyperUniquesSerde;
 import io.druid.segment.IndexBuilder;
@@ -73,7 +71,6 @@ public class SegmentGenerator implements Closeable
   public QueryableIndex generate(
       final DataSegment dataSegment,
       final BenchmarkSchemaInfo schemaInfo,
-      final Granularity granularity,
       final int numRows
   )
   {
@@ -112,7 +109,6 @@ public class SegmentGenerator implements Closeable
         .withDimensionsSpec(new DimensionsSpec(dimensions, ImmutableList.of(), ImmutableList.of()))
         .withMetrics(schemaInfo.getAggsArray())
         .withRollup(schemaInfo.isWithRollup())
-        .withQueryGranularity(granularity)
         .build();
 
     final List<InputRow> rows = new ArrayList<>();
@@ -145,8 +141,8 @@ public class SegmentGenerator implements Closeable
       return Iterables.getOnlyElement(indexes);
     } else {
       try {
-        final QueryableIndex merged = TestHelper.getTestIndexIO(OffHeapMemorySegmentWriteOutMediumFactory.instance()).loadIndex(
-            TestHelper.getTestIndexMergerV9(OffHeapMemorySegmentWriteOutMediumFactory.instance()).merge(
+        final QueryableIndex merged = TestHelper.getTestIndexIO().loadIndex(
+            TestHelper.getTestIndexMergerV9().merge(
                 indexes.stream().map(QueryableIndexIndexableAdapter::new).collect(Collectors.toList()),
                 false,
                 schemaInfo.getAggs()
@@ -187,7 +183,7 @@ public class SegmentGenerator implements Closeable
         .create()
         .schema(indexSchema)
         .tmpDir(new File(new File(tempDir, identifier), String.valueOf(indexNumber)))
-        .segmentWriteOutMediumFactory(OffHeapMemorySegmentWriteOutMediumFactory.instance())
+        .indexMerger(TestHelper.getTestIndexMergerV9())
         .rows(rows)
         .buildMMappedIndex();
   }

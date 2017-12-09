@@ -28,6 +28,9 @@ package io.druid.segment;
  */
 public interface DoubleColumnSelector extends ColumnValueSelector<Double>
 {
+  @Override
+  double getDouble();
+
   /**
    * @deprecated This method is marked as deprecated in DoubleColumnSelector to minimize the probability of accidential
    * calling. "Polymorphism" of DoubleColumnSelector should be used only when operating on {@link ColumnValueSelector}

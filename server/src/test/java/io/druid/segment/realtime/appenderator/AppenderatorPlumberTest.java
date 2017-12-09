@@ -81,7 +81,6 @@ public class AppenderatorPlumberTest
         0,
         false,
         null,
-        null,
         null
     );
 

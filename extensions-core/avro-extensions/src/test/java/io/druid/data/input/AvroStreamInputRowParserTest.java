@@ -214,7 +214,7 @@ public class AvroStreamInputRowParserTest
     // write avro datum to bytes
     writer.write(someAvroDatum, EncoderFactory.get().directBinaryEncoder(out, null));
 
-    InputRow inputRow = parser2.parseBatch(ByteBuffer.wrap(out.toByteArray())).get(0);
+    InputRow inputRow = parser2.parse(ByteBuffer.wrap(out.toByteArray()));
 
     assertInputRowCorrect(inputRow, DIMENSIONS);
   }
@@ -255,7 +255,7 @@ public class AvroStreamInputRowParserTest
     // write avro datum to bytes
     writer.write(someAvroDatum, EncoderFactory.get().directBinaryEncoder(out, null));
 
-    InputRow inputRow = parser2.parseBatch(ByteBuffer.wrap(out.toByteArray())).get(0);
+    InputRow inputRow = parser2.parse(ByteBuffer.wrap(out.toByteArray()));
 
     assertInputRowCorrect(inputRow, DIMENSIONS_SCHEMALESS);
   }

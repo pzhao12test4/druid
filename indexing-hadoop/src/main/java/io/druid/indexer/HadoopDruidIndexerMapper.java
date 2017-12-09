@@ -19,21 +19,19 @@
 
 package io.druid.indexer;
 
-import com.google.common.collect.ImmutableList;
 import io.druid.data.input.InputRow;
 import io.druid.data.input.impl.InputRowParser;
 import io.druid.data.input.impl.StringInputRowParser;
 import io.druid.java.util.common.DateTimes;
 import io.druid.java.util.common.RE;
-import io.druid.java.util.common.collect.Utils;
 import io.druid.java.util.common.logger.Logger;
 import io.druid.java.util.common.parsers.ParseException;
 import io.druid.segment.indexing.granularity.GranularitySpec;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Mapper;
 
+import javax.annotation.Nullable;
 import java.io.IOException;
-import java.util.List;
 
 public abstract class HadoopDruidIndexerMapper<KEYOUT, VALUEOUT> extends Mapper<Object, Object, KEYOUT, VALUEOUT>
 {
@@ -63,9 +61,9 @@ public abstract class HadoopDruidIndexerMapper<KEYOUT, VALUEOUT> extends Mapper<
   protected void map(Object key, Object value, Context context) throws IOException, InterruptedException
   {
     try {
-      final List<InputRow> inputRows;
+      final InputRow inputRow;
       try {
-        inputRows = parseInputRow(value, parser);
+        inputRow = parseInputRow(value, parser);
       }
       catch (ParseException e) {
         if (reportParseExceptions) {
@@ -76,17 +74,16 @@ public abstract class HadoopDruidIndexerMapper<KEYOUT, VALUEOUT> extends Mapper<
         return; // we're ignoring this invalid row
       }
 
-      for (InputRow inputRow : inputRows) {
-        if (inputRow == null) {
-          // Throw away null rows from the parser.
-          log.debug("Throwing away row [%s]", value);
-          continue;
-        }
-        if (!granularitySpec.bucketIntervals().isPresent()
-            || granularitySpec.bucketInterval(DateTimes.utc(inputRow.getTimestampFromEpoch()))
-                              .isPresent()) {
-          innerMap(inputRow, context, reportParseExceptions);
-        }
+      if (inputRow == null) {
+        // Throw away null rows from the parser.
+        log.debug("Throwing away row [%s]", value);
+        return;
+      }
+
+      if (!granularitySpec.bucketIntervals().isPresent()
+          || granularitySpec.bucketInterval(DateTimes.utc(inputRow.getTimestampFromEpoch()))
+                            .isPresent()) {
+        innerMap(inputRow, context, reportParseExceptions);
       }
     }
     catch (RuntimeException e) {
@@ -94,20 +91,21 @@ public abstract class HadoopDruidIndexerMapper<KEYOUT, VALUEOUT> extends Mapper<
     }
   }
 
-  private static List<InputRow> parseInputRow(Object value, InputRowParser parser)
+  @Nullable
+  public static InputRow parseInputRow(Object value, InputRowParser parser)
   {
     if (parser instanceof StringInputRowParser && value instanceof Text) {
       //Note: This is to ensure backward compatibility with 0.7.0 and before
       //HadoopyStringInputRowParser can handle this and this special case is not needed
       //except for backward compatibility
-      return Utils.nullableListOf(((StringInputRowParser) parser).parse(value.toString()));
+      return ((StringInputRowParser) parser).parse(value.toString());
     } else if (value instanceof InputRow) {
-      return ImmutableList.of((InputRow) value);
+      return (InputRow) value;
     } else if (value == null) {
       // Pass through nulls so they get thrown away.
-      return Utils.nullableListOf((InputRow) null);
+      return null;
     } else {
-      return parser.parseBatch(value);
+      return parser.parse(value);
     }
   }
 

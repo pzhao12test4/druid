@@ -23,7 +23,6 @@ package io.druid.firehose.kafka;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Iterators;
 import com.google.common.collect.Sets;
 import io.druid.data.input.Firehose;
 import io.druid.data.input.FirehoseFactory;
@@ -41,7 +40,6 @@ import javax.annotation.Nullable;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -108,12 +106,10 @@ public class KafkaEightFirehoseFactory implements FirehoseFactory<InputRowParser
 
     return new Firehose()
     {
-      Iterator<InputRow> nextIterator = Iterators.emptyIterator();
-
       @Override
       public boolean hasMore()
       {
-        return nextIterator.hasNext() || iter.hasNext();
+        return iter.hasNext();
       }
 
       @Nullable
@@ -121,16 +117,13 @@ public class KafkaEightFirehoseFactory implements FirehoseFactory<InputRowParser
       public InputRow nextRow()
       {
         try {
-          if (!nextIterator.hasNext()) {
-            final byte[] message = iter.next().message();
+          final byte[] message = iter.next().message();
 
-            if (message == null) {
-              return null;
-            }
-            nextIterator = theParser.parseBatch(ByteBuffer.wrap(message)).iterator();
+          if (message == null) {
+            return null;
           }
 
-          return nextIterator.next();
+          return theParser.parse(ByteBuffer.wrap(message));
 
         }
         catch (InvalidMessageException e) {

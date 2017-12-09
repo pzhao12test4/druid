@@ -22,7 +22,6 @@ package io.druid.data.input.protobuf;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.github.os72.protobuf.dynamic.DynamicSchema;
-import com.google.common.collect.ImmutableList;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Descriptors;
 import com.google.protobuf.Descriptors.Descriptor;
@@ -42,7 +41,6 @@ import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.ByteBuffer;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -81,7 +79,7 @@ public class ProtobufInputRowParser implements ByteBufferInputRowParser
   }
 
   @Override
-  public List<InputRow> parseBatch(ByteBuffer input)
+  public InputRow parse(ByteBuffer input)
   {
     if (parser == null) {
       // parser should be created when it is really used to avoid unnecessary initialization of the underlying
@@ -97,12 +95,12 @@ public class ProtobufInputRowParser implements ByteBufferInputRowParser
       throw new ParseException(e, "Protobuf message could not be parsed");
     }
 
-    Map<String, Object> record = parser.parseToMap(json);
-    return ImmutableList.of(new MapBasedInputRow(
+    Map<String, Object> record = parser.parse(json);
+    return new MapBasedInputRow(
         parseSpec.getTimestampSpec().extractTimestamp(record),
         parseSpec.getDimensionsSpec().getDimensionNames(),
         record
-    ));
+    );
   }
 
   private Descriptor getDescriptor(String descriptorFilePath)

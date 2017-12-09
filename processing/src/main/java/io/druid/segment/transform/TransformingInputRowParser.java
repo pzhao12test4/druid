@@ -23,9 +23,6 @@ import io.druid.data.input.InputRow;
 import io.druid.data.input.impl.InputRowParser;
 import io.druid.data.input.impl.ParseSpec;
 
-import java.util.List;
-import java.util.stream.Collectors;
-
 public class TransformingInputRowParser<T> implements InputRowParser<T>
 {
   private final InputRowParser<T> parser;
@@ -45,9 +42,9 @@ public class TransformingInputRowParser<T> implements InputRowParser<T>
   }
 
   @Override
-  public List<InputRow> parseBatch(final T row)
+  public InputRow parse(final T row)
   {
-    return parser.parseBatch(row).stream().map(transformer::transform).collect(Collectors.toList());
+    return transformer.transform(parser.parse(row));
   }
 
   @Override

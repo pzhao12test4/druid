@@ -40,7 +40,7 @@ public class Parsers
       public Map<K, V> apply(String input)
       {
         try {
-          return p.parseToMap(input);
+          return p.parse(input);
         }
         catch (Exception e) {
           return null;

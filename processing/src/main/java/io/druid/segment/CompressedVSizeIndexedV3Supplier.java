@@ -19,23 +19,22 @@
 
 package io.druid.segment;
 
-import com.google.common.annotations.VisibleForTesting;
 import io.druid.java.util.common.IAE;
-import io.druid.java.util.common.io.Closer;
-import io.druid.java.util.common.io.smoosh.FileSmoosher;
+import io.druid.java.util.common.io.smoosh.SmooshedFileMapper;
 import io.druid.segment.data.CompressedIntsIndexedSupplier;
+import io.druid.segment.data.CompressedObjectStrategy;
 import io.druid.segment.data.CompressedVSizeIntsIndexedSupplier;
-import io.druid.segment.data.CompressionStrategy;
 import io.druid.segment.data.IndexedInts;
 import io.druid.segment.data.IndexedMultivalue;
 import io.druid.segment.data.WritableSupplier;
-import it.unimi.dsi.fastutil.ints.IntArrayList;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.WritableByteChannel;
+import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 
 /**
  * The format is mostly the same with CompressedVSizeIndexedSupplier(which has version 0x2, so we call it V2),
@@ -51,7 +50,7 @@ public class CompressedVSizeIndexedV3Supplier implements WritableSupplier<Indexe
   private final CompressedIntsIndexedSupplier offsetSupplier;
   private final CompressedVSizeIntsIndexedSupplier valueSupplier;
 
-  private CompressedVSizeIndexedV3Supplier(
+  CompressedVSizeIndexedV3Supplier(
       CompressedIntsIndexedSupplier offsetSupplier,
       CompressedVSizeIntsIndexedSupplier valueSupplier
   )
@@ -60,37 +59,42 @@ public class CompressedVSizeIndexedV3Supplier implements WritableSupplier<Indexe
     this.valueSupplier = valueSupplier;
   }
 
-  public static CompressedVSizeIndexedV3Supplier fromByteBuffer(ByteBuffer buffer, ByteOrder order)
+  public static CompressedVSizeIndexedV3Supplier fromByteBuffer(
+      ByteBuffer buffer,
+      ByteOrder order,
+      SmooshedFileMapper fileMapper
+  )
   {
     byte versionFromBuffer = buffer.get();
 
     if (versionFromBuffer == VERSION) {
       CompressedIntsIndexedSupplier offsetSupplier = CompressedIntsIndexedSupplier.fromByteBuffer(
           buffer,
-          order
+          order,
+          fileMapper
       );
       CompressedVSizeIntsIndexedSupplier valueSupplier = CompressedVSizeIntsIndexedSupplier.fromByteBuffer(
           buffer,
-          order
+          order,
+          fileMapper
       );
       return new CompressedVSizeIndexedV3Supplier(offsetSupplier, valueSupplier);
     }
     throw new IAE("Unknown version[%s]", versionFromBuffer);
   }
 
-  @VisibleForTesting
+  // for test
   public static CompressedVSizeIndexedV3Supplier fromIterable(
-      final Iterable<IndexedInts> objectsIterable,
-      final int offsetChunkFactor,
-      final int maxValue,
+      Iterable<IndexedInts> objectsIterable,
+      int offsetChunkFactor,
+      int maxValue,
       final ByteOrder byteOrder,
-      final CompressionStrategy compression,
-      final Closer closer
+      CompressedObjectStrategy.CompressionStrategy compression
   )
   {
     Iterator<IndexedInts> objects = objectsIterable.iterator();
-    IntArrayList offsetList = new IntArrayList();
-    IntArrayList values = new IntArrayList();
+    List<Integer> offsetList = new ArrayList<>();
+    List<Integer> values = new ArrayList<>();
 
     int offset = 0;
     while (objects.hasNext()) {
@@ -106,32 +110,30 @@ public class CompressedVSizeIndexedV3Supplier implements WritableSupplier<Indexe
         offsetList,
         offsetChunkFactor,
         byteOrder,
-        compression,
-        closer
+        compression
     );
     CompressedVSizeIntsIndexedSupplier valuesSupplier = CompressedVSizeIntsIndexedSupplier.fromList(
         values,
         maxValue,
         CompressedVSizeIntsIndexedSupplier.maxIntsInBufferForValue(maxValue),
         byteOrder,
-        compression,
-        closer
+        compression
     );
     return new CompressedVSizeIndexedV3Supplier(headerSupplier, valuesSupplier);
   }
 
   @Override
-  public long getSerializedSize() throws IOException
+  public long getSerializedSize()
   {
     return 1 + offsetSupplier.getSerializedSize() + valueSupplier.getSerializedSize();
   }
 
   @Override
-  public void writeTo(WritableByteChannel channel, FileSmoosher smoosher) throws IOException
+  public void writeToChannel(WritableByteChannel channel) throws IOException
   {
     channel.write(ByteBuffer.wrap(new byte[]{VERSION}));
-    offsetSupplier.writeTo(channel, smoosher);
-    valueSupplier.writeTo(channel, smoosher);
+    offsetSupplier.writeToChannel(channel);
+    valueSupplier.writeToChannel(channel);
   }
 
   @Override

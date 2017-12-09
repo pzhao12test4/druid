@@ -22,10 +22,10 @@ package io.druid.segment;
 import com.google.common.base.Throwables;
 import io.druid.segment.column.ColumnDescriptor;
 import io.druid.segment.column.ValueType;
+import io.druid.segment.data.CompressedObjectStrategy;
 import io.druid.segment.data.CompressionFactory;
-import io.druid.segment.data.CompressionStrategy;
+import io.druid.segment.data.IOPeon;
 import io.druid.segment.serde.LongGenericColumnPartSerde;
-import io.druid.segment.writeout.SegmentWriteOutMedium;
 
 import java.io.IOException;
 import java.nio.IntBuffer;
@@ -35,30 +35,32 @@ public class LongDimensionMergerV9 implements DimensionMergerV9<Long>
 {
   protected String dimensionName;
   protected final IndexSpec indexSpec;
+  protected IOPeon ioPeon;
   protected LongColumnSerializer serializer;
 
-  LongDimensionMergerV9(
+  public LongDimensionMergerV9(
       String dimensionName,
       IndexSpec indexSpec,
-      SegmentWriteOutMedium segmentWriteOutMedium
+      IOPeon ioPeon
   )
   {
     this.dimensionName = dimensionName;
     this.indexSpec = indexSpec;
+    this.ioPeon = ioPeon;
 
     try {
-      setupEncodedValueWriter(segmentWriteOutMedium);
+      setupEncodedValueWriter();
     }
     catch (IOException ioe) {
       Throwables.propagate(ioe);
     }
   }
 
-  protected void setupEncodedValueWriter(SegmentWriteOutMedium segmentWriteOutMedium) throws IOException
+  protected void setupEncodedValueWriter() throws IOException
   {
-    final CompressionStrategy metCompression = indexSpec.getMetricCompression();
+    final CompressedObjectStrategy.CompressionStrategy metCompression = indexSpec.getMetricCompression();
     final CompressionFactory.LongEncodingStrategy longEncoding = indexSpec.getLongEncoding();
-    this.serializer = LongColumnSerializer.create(segmentWriteOutMedium, dimensionName, metCompression, longEncoding);
+    this.serializer = LongColumnSerializer.create(ioPeon, dimensionName, metCompression, longEncoding);
     serializer.open();
   }
 
@@ -96,6 +98,7 @@ public class LongDimensionMergerV9 implements DimensionMergerV9<Long>
   @Override
   public ColumnDescriptor makeColumnDescriptor() throws IOException
   {
+    serializer.close();
     final ColumnDescriptor.Builder builder = ColumnDescriptor.builder();
     builder.setValueType(ValueType.LONG);
     builder.addSerde(

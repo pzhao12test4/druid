@@ -20,10 +20,10 @@
 package io.druid.segment.data;
 
 import com.google.common.base.Supplier;
+import com.google.common.io.ByteSink;
 import com.google.common.primitives.Longs;
 import io.druid.java.util.common.StringUtils;
 import io.druid.java.util.common.guava.CloseQuietly;
-import io.druid.segment.writeout.OffHeapMemorySegmentWriteOutMedium;
 import it.unimi.dsi.fastutil.ints.IntArrays;
 import org.junit.Assert;
 import org.junit.Test;
@@ -32,6 +32,7 @@ import org.junit.runners.Parameterized;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.Channels;
@@ -50,7 +51,7 @@ public class CompressedLongsSerdeTest
   {
     List<Object[]> data = new ArrayList<>();
     for (CompressionFactory.LongEncodingStrategy encodingStrategy: CompressionFactory.LongEncodingStrategy.values()) {
-      for (CompressionStrategy strategy : CompressionStrategy.values()) {
+      for (CompressedObjectStrategy.CompressionStrategy strategy : CompressedObjectStrategy.CompressionStrategy.values()) {
         data.add(new Object[]{encodingStrategy, strategy, ByteOrder.BIG_ENDIAN});
         data.add(new Object[]{encodingStrategy, strategy, ByteOrder.LITTLE_ENDIAN});
       }
@@ -59,7 +60,7 @@ public class CompressedLongsSerdeTest
   }
 
   protected final CompressionFactory.LongEncodingStrategy encodingStrategy;
-  protected final CompressionStrategy compressionStrategy;
+  protected final CompressedObjectStrategy.CompressionStrategy compressionStrategy;
   protected final ByteOrder order;
 
   private final long values0[] = {};
@@ -88,7 +89,7 @@ public class CompressedLongsSerdeTest
 
   public CompressedLongsSerdeTest(
       CompressionFactory.LongEncodingStrategy encodingStrategy,
-      CompressionStrategy compressionStrategy,
+      CompressedObjectStrategy.CompressionStrategy compressionStrategy,
       ByteOrder order
   )
   {
@@ -129,12 +130,8 @@ public class CompressedLongsSerdeTest
 
   public void testValues(long[] values) throws Exception
   {
-    LongSupplierSerializer serializer = CompressionFactory.getLongSerializer(
-        new OffHeapMemorySegmentWriteOutMedium(),
-        "test",
-        order,
-        encodingStrategy,
-        compressionStrategy
+    LongSupplierSerializer serializer = CompressionFactory.getLongSerializer(new IOPeonForTesting(), "test", order,
+                                                                             encodingStrategy, compressionStrategy
     );
     serializer.open();
 
@@ -144,10 +141,19 @@ public class CompressedLongsSerdeTest
     Assert.assertEquals(values.length, serializer.size());
 
     final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-    serializer.writeTo(Channels.newChannel(baos), null);
+    serializer.closeAndConsolidate(
+        new ByteSink()
+        {
+          @Override
+          public OutputStream openStream() throws IOException
+          {
+            return baos;
+          }
+        }
+    );
     Assert.assertEquals(baos.size(), serializer.getSerializedSize());
     CompressedLongsIndexedSupplier supplier = CompressedLongsIndexedSupplier
-        .fromByteBuffer(ByteBuffer.wrap(baos.toByteArray()), order);
+        .fromByteBuffer(ByteBuffer.wrap(baos.toByteArray()), order, null);
     IndexedLongs longs = supplier.get();
 
     assertIndexMatchesVals(longs, values);
@@ -197,13 +203,14 @@ public class CompressedLongsSerdeTest
   private void testSupplierSerde(CompressedLongsIndexedSupplier supplier, long[] vals) throws IOException
   {
     ByteArrayOutputStream baos = new ByteArrayOutputStream();
-    supplier.writeTo(Channels.newChannel(baos), null);
+    supplier.writeToChannel(Channels.newChannel(baos));
 
     final byte[] bytes = baos.toByteArray();
     Assert.assertEquals(supplier.getSerializedSize(), bytes.length);
     CompressedLongsIndexedSupplier anotherSupplier = CompressedLongsIndexedSupplier.fromByteBuffer(
         ByteBuffer.wrap(bytes),
-        order
+        order,
+        null
     );
     IndexedLongs indexed = anotherSupplier.get();
     assertIndexMatchesVals(indexed, vals);

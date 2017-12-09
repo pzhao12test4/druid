@@ -24,7 +24,6 @@ import com.google.common.io.OutputSupplier;
 import com.google.common.primitives.Floats;
 import com.google.common.primitives.Ints;
 import com.google.common.primitives.Longs;
-import io.druid.io.Channels;
 import io.druid.java.util.common.StringUtils;
 
 import java.io.IOException;
@@ -40,6 +39,38 @@ public class SerializerUtils
 {
 
   /**
+   * Writes the given long value into the given OutputStream in big-endian byte order, using the helperBuffer. Faster
+   * alternative to out.write(Longs.toByteArray(value)), more convenient (sometimes) than wrapping the OutputStream into
+   * {@link java.io.DataOutputStream}.
+   *
+   * @param helperBuffer a big-endian heap ByteBuffer with capacity of at least 8
+   */
+  public static void writeBigEndianLongToOutputStream(OutputStream out, long value, ByteBuffer helperBuffer)
+      throws IOException
+  {
+    if (helperBuffer.order() != ByteOrder.BIG_ENDIAN || !helperBuffer.hasArray()) {
+      throw new IllegalArgumentException("Expected writable, big-endian, heap byteBuffer");
+    }
+    helperBuffer.putLong(0, value);
+    out.write(helperBuffer.array(), helperBuffer.arrayOffset(), Longs.BYTES);
+  }
+
+  /**
+   * Writes the given long value into the given OutputStream in the native byte order, using the helperBuffer.
+   *
+   * @param helperBuffer a heap ByteBuffer with capacity of at least 8, with the native byte order
+   */
+  public static void writeNativeOrderedLongToOutputStream(OutputStream out, long value, ByteBuffer helperBuffer)
+      throws IOException
+  {
+    if (helperBuffer.order() != ByteOrder.nativeOrder() || !helperBuffer.hasArray()) {
+      throw new IllegalArgumentException("Expected writable heap byteBuffer with the native byte order");
+    }
+    helperBuffer.putLong(0, value);
+    out.write(helperBuffer.array(), helperBuffer.arrayOffset(), Longs.BYTES);
+  }
+
+  /**
    * Writes the given int value into the given OutputStream in big-endian byte order, using the helperBuffer. Faster
    * alternative to out.write(Ints.toByteArray(value)), more convenient (sometimes) than wrapping the OutputStream into
    * {@link java.io.DataOutputStream}.
@@ -51,6 +82,21 @@ public class SerializerUtils
   {
     if (helperBuffer.order() != ByteOrder.BIG_ENDIAN || !helperBuffer.hasArray()) {
       throw new IllegalArgumentException("Expected writable, big-endian, heap byteBuffer");
+    }
+    helperBuffer.putInt(0, value);
+    out.write(helperBuffer.array(), helperBuffer.arrayOffset(), Ints.BYTES);
+  }
+
+  /**
+   * Writes the given int value into the given OutputStream in the native byte order, using the given helperBuffer.
+   *
+   * @param helperBuffer a heap ByteBuffer with capacity of at least 4, with the native byte order
+   */
+  public static void writeNativeOrderedIntToOutputStream(OutputStream out, int value, ByteBuffer helperBuffer)
+      throws IOException
+  {
+    if (helperBuffer.order() != ByteOrder.nativeOrder() || !helperBuffer.hasArray()) {
+      throw new IllegalArgumentException("Expected writable heap byteBuffer with the native byte order");
     }
     helperBuffer.putInt(0, value);
     out.write(helperBuffer.array(), helperBuffer.arrayOffset(), Ints.BYTES);
@@ -74,10 +120,10 @@ public class SerializerUtils
   {
     byte[] nameBytes = StringUtils.toUtf8(name);
     writeInt(out, nameBytes.length);
-    Channels.writeFully(out, ByteBuffer.wrap(nameBytes));
+    out.write(ByteBuffer.wrap(nameBytes));
   }
 
-  String readString(InputStream in) throws IOException
+  public String readString(InputStream in) throws IOException
   {
     final int length = readInt(in);
     byte[] stringBytes = new byte[length];
@@ -98,12 +144,12 @@ public class SerializerUtils
     return bytes;
   }
 
-  void writeStrings(OutputStream out, String[] names) throws IOException
+  public void writeStrings(OutputStream out, String[] names) throws IOException
   {
     writeStrings(out, Arrays.asList(names));
   }
 
-  private void writeStrings(OutputStream out, List<String> names) throws IOException
+  public void writeStrings(OutputStream out, List<String> names) throws IOException
   {
     writeInt(out, names.size());
 
@@ -112,7 +158,7 @@ public class SerializerUtils
     }
   }
 
-  String[] readStrings(InputStream in) throws IOException
+  public String[] readStrings(InputStream in) throws IOException
   {
     int length = readInt(in);
 
@@ -125,7 +171,7 @@ public class SerializerUtils
     return retVal;
   }
 
-  String[] readStrings(ByteBuffer in) throws IOException
+  public String[] readStrings(ByteBuffer in) throws IOException
   {
     int length = in.getInt();
 
@@ -138,20 +184,20 @@ public class SerializerUtils
     return retVal;
   }
 
-  private void writeInt(OutputStream out, int intValue) throws IOException
+  public void writeInt(OutputStream out, int intValue) throws IOException
   {
     out.write(Ints.toByteArray(intValue));
   }
 
-  private void writeInt(WritableByteChannel out, int intValue) throws IOException
+  public void writeInt(WritableByteChannel out, int intValue) throws IOException
   {
     final ByteBuffer buffer = ByteBuffer.allocate(Ints.BYTES);
     buffer.putInt(intValue);
     buffer.flip();
-    Channels.writeFully(out, buffer);
+    out.write(buffer);
   }
 
-  private int readInt(InputStream in) throws IOException
+  public int readInt(InputStream in) throws IOException
   {
     byte[] intBytes = new byte[Ints.BYTES];
 
@@ -160,7 +206,7 @@ public class SerializerUtils
     return Ints.fromByteArray(intBytes);
   }
 
-  void writeInts(OutputStream out, int[] ints) throws IOException
+  public void writeInts(OutputStream out, int[] ints) throws IOException
   {
     writeInt(out, ints.length);
 
@@ -169,7 +215,7 @@ public class SerializerUtils
     }
   }
 
-  int[] readInts(InputStream in) throws IOException
+  public int[] readInts(InputStream in) throws IOException
   {
     int size = readInt(in);
 
@@ -181,7 +227,7 @@ public class SerializerUtils
     return retVal;
   }
 
-  private void writeLong(OutputStream out, long longValue) throws IOException
+  public void writeLong(OutputStream out, long longValue) throws IOException
   {
     out.write(Longs.toByteArray(longValue));
   }
@@ -191,10 +237,10 @@ public class SerializerUtils
     final ByteBuffer buffer = ByteBuffer.allocate(Longs.BYTES);
     buffer.putLong(longValue);
     buffer.flip();
-    Channels.writeFully(out, buffer);
+    out.write(buffer);
   }
 
-  long readLong(InputStream in) throws IOException
+  public long readLong(InputStream in) throws IOException
   {
     byte[] longBytes = new byte[Longs.BYTES];
 
@@ -203,7 +249,7 @@ public class SerializerUtils
     return Longs.fromByteArray(longBytes);
   }
 
-  void writeLongs(OutputStream out, long[] longs) throws IOException
+  public void writeLongs(OutputStream out, long[] longs) throws IOException
   {
     writeInt(out, longs.length);
 
@@ -212,7 +258,7 @@ public class SerializerUtils
     }
   }
 
-  long[] readLongs(InputStream in) throws IOException
+  public long[] readLongs(InputStream in) throws IOException
   {
     int size = readInt(in);
 
@@ -229,20 +275,20 @@ public class SerializerUtils
     writeInt(out, Float.floatToRawIntBits(floatValue));
   }
 
-  void writeFloat(WritableByteChannel out, float floatValue) throws IOException
+  public void writeFloat(WritableByteChannel out, float floatValue) throws IOException
   {
     final ByteBuffer buffer = ByteBuffer.allocate(Floats.BYTES);
     buffer.putFloat(floatValue);
     buffer.flip();
-    Channels.writeFully(out, buffer);
+    out.write(buffer);
   }
 
-  float readFloat(InputStream in) throws IOException
+  public float readFloat(InputStream in) throws IOException
   {
     return Float.intBitsToFloat(readInt(in));
   }
 
-  void writeFloats(OutputStream out, float[] floats) throws IOException
+  public void writeFloats(OutputStream out, float[] floats) throws IOException
   {
     writeInt(out, floats.length);
 
@@ -251,7 +297,7 @@ public class SerializerUtils
     }
   }
 
-  float[] readFloats(InputStream in) throws IOException
+  public float[] readFloats(InputStream in) throws IOException
   {
     int size = readInt(in);
 

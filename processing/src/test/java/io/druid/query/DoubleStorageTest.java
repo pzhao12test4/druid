@@ -32,7 +32,6 @@ import io.druid.data.input.impl.TimestampSpec;
 import io.druid.java.util.common.DateTimes;
 import io.druid.java.util.common.Intervals;
 import io.druid.java.util.common.guava.Sequences;
-import io.druid.segment.writeout.OffHeapMemorySegmentWriteOutMediumFactory;
 import io.druid.query.aggregation.DoubleSumAggregatorFactory;
 import io.druid.query.metadata.SegmentMetadataQueryConfig;
 import io.druid.query.metadata.SegmentMetadataQueryQueryToolChest;
@@ -111,9 +110,8 @@ public class DoubleStorageTest
   }
 
 
-  private static final IndexMergerV9 INDEX_MERGER_V9 =
-      TestHelper.getTestIndexMergerV9(OffHeapMemorySegmentWriteOutMediumFactory.instance());
-  private static final IndexIO INDEX_IO = TestHelper.getTestIndexIO(OffHeapMemorySegmentWriteOutMediumFactory.instance());
+  private static final IndexMergerV9 INDEX_MERGER_V9 = TestHelper.getTestIndexMergerV9();
+  private static final IndexIO INDEX_IO = TestHelper.getTestIndexIO();
   private static final Integer MAX_ROWS = 10;
   private static final String TIME_COLUMN = "__time";
   private static final String DIM_NAME = "testDimName";
@@ -333,7 +331,7 @@ public class DoubleStorageTest
 
     getStreamOfEvents().forEach(o -> {
       try {
-        index.add(ROW_PARSER.parseBatch((Map<String, Object>) o).get(0));
+        index.add(ROW_PARSER.parse((Map) o));
       }
       catch (IndexSizeExceededException e) {
         Throwables.propagate(e);
@@ -348,7 +346,7 @@ public class DoubleStorageTest
     File someTmpFile = File.createTempFile("billy", "yay");
     someTmpFile.delete();
     someTmpFile.mkdirs();
-    INDEX_MERGER_V9.persist(index, someTmpFile, new IndexSpec(), null);
+    INDEX_MERGER_V9.persist(index, someTmpFile, new IndexSpec());
     someTmpFile.delete();
     return INDEX_IO.loadIndex(someTmpFile);
   }

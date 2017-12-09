@@ -216,7 +216,7 @@ public class RealtimePlumber implements Plumber
       return -1;
     }
 
-    final int numRows = sink.add(row, false);
+    final int numRows = sink.add(row);
 
     if (!sink.canAppendRow() || System.currentTimeMillis() > nextFlush) {
       persist(committerSupplier.get());
@@ -422,13 +422,13 @@ public class RealtimePlumber implements Plumber
                   closer.register(segmentAndCloseable.rhs);
                 }
 
+
                 mergedFile = indexMerger.mergeQueryableIndex(
                     indexes,
                     schema.getGranularitySpec().isRollup(),
                     schema.getAggregators(),
                     mergedTarget,
-                    config.getIndexSpec(),
-                    config.getSegmentWriteOutMediumFactory()
+                    config.getIndexSpec()
                 );
               }
               catch (Throwable t) {
@@ -942,8 +942,7 @@ public class RealtimePlumber implements Plumber
             indexToPersist.getIndex(),
             interval,
             new File(computePersistDir(schema, interval), String.valueOf(indexToPersist.getCount())),
-            indexSpec,
-            config.getSegmentWriteOutMediumFactory()
+            indexSpec
         );
 
         indexToPersist.swapSegment(

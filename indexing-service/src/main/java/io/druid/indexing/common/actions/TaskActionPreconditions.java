@@ -25,20 +25,16 @@ import io.druid.indexing.common.task.Task;
 import io.druid.indexing.overlord.TaskLockbox;
 import io.druid.java.util.common.ISE;
 import io.druid.timeline.DataSegment;
-import org.joda.time.DateTime;
 
-import java.util.Collection;
 import java.util.List;
-import java.util.Map.Entry;
-import java.util.NavigableMap;
-import java.util.TreeMap;
+import java.util.Set;
 
 public class TaskActionPreconditions
 {
-  static void checkLockCoversSegments(
+  public static void checkLockCoversSegments(
       final Task task,
       final TaskLockbox taskLockbox,
-      final Collection<DataSegment> segments
+      final Set<DataSegment> segments
   )
   {
     if (!isLockCoversSegments(task, taskLockbox, segments)) {
@@ -50,7 +46,7 @@ public class TaskActionPreconditions
   static boolean isLockCoversSegments(
       final Task task,
       final TaskLockbox taskLockbox,
-      final Collection<DataSegment> segments
+      final Set<DataSegment> segments
   )
   {
     // Verify that each of these segments falls under some lock
@@ -59,31 +55,19 @@ public class TaskActionPreconditions
     // NOTE: it and before we perform the segment insert, but, that should be OK since the worst that happens is we
     // NOTE: insert some segments from the task but not others.
 
-    final NavigableMap<DateTime, TaskLock> taskLockMap = getTaskLockMap(taskLockbox, task);
-    if (taskLockMap.isEmpty()) {
-      return false;
+    final List<TaskLock> taskLocks = taskLockbox.findLocksForTask(task);
+    for (final DataSegment segment : segments) {
+      final boolean ok = taskLocks.stream().anyMatch(
+          taskLock -> taskLock.getDataSource().equals(segment.getDataSource())
+                      && taskLock.getInterval().contains(segment.getInterval())
+                      && taskLock.getVersion().compareTo(segment.getVersion()) >= 0
+      );
+
+      if (!ok) {
+        return false;
+      }
     }
 
-    return segments.stream().allMatch(
-        segment -> {
-          final Entry<DateTime, TaskLock> entry = taskLockMap.floorEntry(segment.getInterval().getStart());
-          if (entry == null) {
-            return false;
-          }
-
-          final TaskLock taskLock = entry.getValue();
-          return taskLock.getInterval().contains(segment.getInterval()) &&
-                 taskLock.getDataSource().equals(segment.getDataSource()) &&
-                 taskLock.getVersion().compareTo(segment.getVersion()) >= 0;
-        }
-    );
-  }
-
-  private static NavigableMap<DateTime, TaskLock> getTaskLockMap(TaskLockbox taskLockbox, Task task)
-  {
-    final List<TaskLock> taskLocks = taskLockbox.findLocksForTask(task);
-    final NavigableMap<DateTime, TaskLock> taskLockMap = new TreeMap<>();
-    taskLocks.forEach(taskLock -> taskLockMap.put(taskLock.getInterval().getStart(), taskLock));
-    return taskLockMap;
+    return true;
   }
 }

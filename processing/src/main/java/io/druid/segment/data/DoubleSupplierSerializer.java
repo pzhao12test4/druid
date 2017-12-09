@@ -19,12 +19,17 @@
 
 package io.druid.segment.data;
 
-import io.druid.segment.serde.Serializer;
 
+import io.druid.java.util.common.io.smoosh.FileSmoosher;
+
+import java.io.Closeable;
 import java.io.IOException;
+import java.nio.channels.WritableByteChannel;
 
-public interface DoubleSupplierSerializer extends Serializer
+public interface DoubleSupplierSerializer extends Closeable
 {
   void open() throws IOException;
   void add(double value) throws IOException;
+  long getSerializedSize();
+  void writeToChannel(WritableByteChannel channel, FileSmoosher smoosher) throws IOException;
 }

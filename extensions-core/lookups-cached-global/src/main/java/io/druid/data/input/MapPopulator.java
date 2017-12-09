@@ -91,7 +91,7 @@ public class MapPopulator<K, V>
             if (lines == Integer.MAX_VALUE) {
               throw new ISE("Cannot read more than %,d lines", Integer.MAX_VALUE);
             }
-            final Map<K, V> kvMap = parser.parseToMap(line);
+            final Map<K, V> kvMap = parser.parse(line);
             map.putAll(kvMap);
             lines++;
             entries += kvMap.size();

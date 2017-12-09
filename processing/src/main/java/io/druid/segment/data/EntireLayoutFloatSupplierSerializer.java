@@ -19,39 +19,49 @@
 
 package io.druid.segment.data;
 
+import com.google.common.io.ByteSink;
+import com.google.common.io.ByteStreams;
+import com.google.common.io.CountingOutputStream;
+import com.google.common.primitives.Floats;
+import com.google.common.primitives.Ints;
 import io.druid.java.util.common.io.smoosh.FileSmoosher;
-import io.druid.segment.writeout.WriteOutBytes;
-import io.druid.segment.writeout.SegmentWriteOutMedium;
-import io.druid.segment.serde.MetaSerdeHelper;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.channels.Channels;
 import java.nio.channels.WritableByteChannel;
 
 public class EntireLayoutFloatSupplierSerializer implements FloatSupplierSerializer
 {
-  private static final MetaSerdeHelper<EntireLayoutFloatSupplierSerializer> metaSerdeHelper = MetaSerdeHelper
-      .firstWriteByte((EntireLayoutFloatSupplierSerializer x) -> CompressedFloatsIndexedSupplier.VERSION)
-      .writeInt(x -> x.numInserted)
-      .writeInt(x -> 0)
-      .writeByte(x -> CompressionStrategy.NONE.getId());
+  private final IOPeon ioPeon;
+  private final String valueFile;
+  private final String metaFile;
+  private CountingOutputStream valuesOut;
+  private long metaCount = 0;
 
-  private final boolean isLittleEndian;
-  private final SegmentWriteOutMedium segmentWriteOutMedium;
-  private WriteOutBytes valuesOut;
+  private final ByteBuffer orderBuffer;
 
   private int numInserted = 0;
 
-  EntireLayoutFloatSupplierSerializer(SegmentWriteOutMedium segmentWriteOutMedium, ByteOrder order)
+  public EntireLayoutFloatSupplierSerializer(
+      IOPeon ioPeon, String filenameBase, ByteOrder order
+  )
   {
-    this.segmentWriteOutMedium = segmentWriteOutMedium;
-    isLittleEndian = order.equals(ByteOrder.LITTLE_ENDIAN);
+    this.ioPeon = ioPeon;
+    this.valueFile = filenameBase + ".value";
+    this.metaFile = filenameBase + ".format";
+
+    orderBuffer = ByteBuffer.allocate(Floats.BYTES);
+    orderBuffer.order(order);
   }
 
   @Override
   public void open() throws IOException
   {
-    valuesOut = segmentWriteOutMedium.makeWriteOutBytes();
+    valuesOut = new CountingOutputStream(ioPeon.makeOutputStream(valueFile));
   }
 
   @Override
@@ -63,25 +73,51 @@ public class EntireLayoutFloatSupplierSerializer implements FloatSupplierSeriali
   @Override
   public void add(float value) throws IOException
   {
-    int valueBits = Float.floatToRawIntBits(value);
-    // WriteOutBytes are always big-endian, so need to reverse bytes
-    if (isLittleEndian) {
-      valueBits = Integer.reverseBytes(valueBits);
-    }
-    valuesOut.writeInt(valueBits);
+    orderBuffer.rewind();
+    orderBuffer.putFloat(value);
+    valuesOut.write(orderBuffer.array());
     ++numInserted;
   }
 
   @Override
-  public long getSerializedSize() throws IOException
+  public void closeAndConsolidate(ByteSink consolidatedOut) throws IOException
   {
-    return metaSerdeHelper.size(this) + valuesOut.size();
+    close();
+    try (OutputStream out = consolidatedOut.openStream();
+         InputStream meta = ioPeon.makeInputStream(metaFile);
+         InputStream value = ioPeon.makeInputStream(valueFile)) {
+      ByteStreams.copy(meta, out);
+      ByteStreams.copy(value, out);
+    }
   }
 
   @Override
-  public void writeTo(WritableByteChannel channel, FileSmoosher smoosher) throws IOException
+  public void close() throws IOException
   {
-    metaSerdeHelper.writeTo(channel, this);
-    valuesOut.writeTo(channel);
+    valuesOut.close();
+    try (CountingOutputStream metaOut = new CountingOutputStream(ioPeon.makeOutputStream(metaFile))) {
+      metaOut.write(CompressedFloatsIndexedSupplier.version);
+      metaOut.write(Ints.toByteArray(numInserted));
+      metaOut.write(Ints.toByteArray(0));
+      metaOut.write(CompressedObjectStrategy.CompressionStrategy.NONE.getId());
+      metaOut.close();
+      metaCount = metaOut.getCount();
+    }
+  }
+
+  @Override
+  public long getSerializedSize()
+  {
+    return metaCount + valuesOut.getCount();
+  }
+
+  @Override
+  public void writeToChannel(WritableByteChannel channel, FileSmoosher smoosher) throws IOException
+  {
+    try (InputStream meta = ioPeon.makeInputStream(metaFile);
+         InputStream value = ioPeon.makeInputStream(valueFile)) {
+      ByteStreams.copy(Channels.newChannel(meta), channel);
+      ByteStreams.copy(Channels.newChannel(value), channel);
+    }
   }
 }

@@ -25,8 +25,6 @@ import io.druid.data.input.impl.StringInputRowParser;
 
 import javax.annotation.Nullable;
 import java.nio.ByteBuffer;
-import java.util.List;
-import java.util.stream.Collectors;
 
 public class TransformingStringInputRowParser extends StringInputRowParser
 {
@@ -45,9 +43,9 @@ public class TransformingStringInputRowParser extends StringInputRowParser
   }
 
   @Override
-  public List<InputRow> parseBatch(final ByteBuffer input)
+  public InputRow parse(final ByteBuffer input)
   {
-    return super.parseBatch(input).stream().map(transformer::transform).collect(Collectors.toList());
+    return transformer.transform(super.parse(input));
   }
 
   @Nullable

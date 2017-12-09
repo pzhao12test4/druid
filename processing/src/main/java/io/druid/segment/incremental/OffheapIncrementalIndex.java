@@ -146,8 +146,7 @@ public class OffheapIncrementalIndex extends IncrementalIndex<BufferAggregator>
       AtomicInteger numEntries,
       TimeAndDims key,
       ThreadLocal<InputRow> rowContainer,
-      Supplier<InputRow> rowSupplier,
-      boolean skipMaxRowsInMemoryCheck // ignored, we always want to check this for offheap
+      Supplier<InputRow> rowSupplier
   ) throws IndexSizeExceededException
   {
     ByteBuffer aggBuffer;

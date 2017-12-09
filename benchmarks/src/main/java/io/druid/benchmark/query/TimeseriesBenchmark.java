@@ -35,7 +35,6 @@ import io.druid.java.util.common.granularity.Granularities;
 import io.druid.java.util.common.guava.Sequence;
 import io.druid.java.util.common.guava.Sequences;
 import io.druid.java.util.common.logger.Logger;
-import io.druid.segment.writeout.OffHeapMemorySegmentWriteOutMediumFactory;
 import io.druid.query.Druids;
 import io.druid.query.FinalizeResultsQueryRunner;
 import io.druid.query.Query;
@@ -133,7 +132,6 @@ public class TimeseriesBenchmark
     JSON_MAPPER = new DefaultObjectMapper();
     INDEX_IO = new IndexIO(
         JSON_MAPPER,
-        OffHeapMemorySegmentWriteOutMediumFactory.instance(),
         new ColumnConfig()
         {
           @Override
@@ -143,7 +141,7 @@ public class TimeseriesBenchmark
           }
         }
     );
-    INDEX_MERGER_V9 = new IndexMergerV9(JSON_MAPPER, INDEX_IO, OffHeapMemorySegmentWriteOutMediumFactory.instance());
+    INDEX_MERGER_V9 = new IndexMergerV9(JSON_MAPPER, INDEX_IO);
   }
 
   private static final Map<String, Map<String, TimeseriesQuery>> SCHEMA_QUERY_MAP = new LinkedHashMap<>();
@@ -288,8 +286,7 @@ public class TimeseriesBenchmark
       File indexFile = INDEX_MERGER_V9.persist(
           incIndexes.get(i),
           tmpDir,
-          new IndexSpec(),
-          null
+          new IndexSpec()
       );
 
       QueryableIndex qIndex = INDEX_IO.loadIndex(indexFile);

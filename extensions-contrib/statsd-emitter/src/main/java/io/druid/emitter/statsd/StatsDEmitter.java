@@ -41,7 +41,6 @@ public class StatsDEmitter implements Emitter
   private final static Logger log = new Logger(StatsDEmitter.class);
   private final static String DRUID_METRIC_SEPARATOR = "\\/";
   private final static String STATSD_SEPARATOR = ":|\\|";
-  private final static String BLANK = "\\s+";
 
   static final StatsDEmitter of(StatsDEmitterConfig config, ObjectMapper mapper)
   {
@@ -105,8 +104,7 @@ public class StatsDEmitter implements Emitter
         String fullName = Joiner.on(config.getSeparator())
                                 .join(nameBuilder.build())
                                 .replaceAll(DRUID_METRIC_SEPARATOR, config.getSeparator())
-                                .replaceAll(STATSD_SEPARATOR, config.getSeparator())
-                                .replaceAll(BLANK, config.getBlankHolder());
+                                .replaceAll(STATSD_SEPARATOR, config.getSeparator());
 
         long val = statsDMetric.convertRange ? Math.round(value.doubleValue() * 100) : value.longValue();
         switch (statsDMetric.type) {

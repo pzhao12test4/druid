@@ -19,19 +19,16 @@
 
 package io.druid.segment.data;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.io.Closeables;
 import com.google.common.primitives.Ints;
 import io.druid.collections.ResourceHolder;
+import io.druid.collections.StupidResourceHolder;
 import io.druid.java.util.common.IAE;
 import io.druid.java.util.common.guava.CloseQuietly;
-import io.druid.java.util.common.io.Closer;
-import io.druid.java.util.common.io.smoosh.FileSmoosher;
+import io.druid.java.util.common.io.smoosh.SmooshedFileMapper;
 import io.druid.query.monomorphicprocessing.RuntimeShapeInspector;
 import io.druid.segment.CompressedPools;
-import io.druid.segment.serde.MetaSerdeHelper;
-import it.unimi.dsi.fastutil.ints.IntArrayList;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -39,28 +36,24 @@ import java.nio.ByteOrder;
 import java.nio.IntBuffer;
 import java.nio.channels.WritableByteChannel;
 import java.util.Iterator;
+import java.util.List;
 
 public class CompressedIntsIndexedSupplier implements WritableSupplier<IndexedInts>
 {
   public static final byte VERSION = 0x2;
   public static final int MAX_INTS_IN_BUFFER = CompressedPools.BUFFER_SIZE / Ints.BYTES;
 
-  private static MetaSerdeHelper<CompressedIntsIndexedSupplier> metaSerdeHelper = MetaSerdeHelper
-      .firstWriteByte((CompressedIntsIndexedSupplier x) -> VERSION)
-      .writeInt(x -> x.totalSize)
-      .writeInt(x -> x.sizePer)
-      .writeByte(x -> x.compression.getId());
 
   private final int totalSize;
   private final int sizePer;
-  private final GenericIndexed<ResourceHolder<ByteBuffer>> baseIntBuffers;
-  private final CompressionStrategy compression;
+  private final GenericIndexed<ResourceHolder<IntBuffer>> baseIntBuffers;
+  private final CompressedObjectStrategy.CompressionStrategy compression;
 
-  private CompressedIntsIndexedSupplier(
+  CompressedIntsIndexedSupplier(
       int totalSize,
       int sizePer,
-      GenericIndexed<ResourceHolder<ByteBuffer>> baseIntBuffers,
-      CompressionStrategy compression
+      GenericIndexed<ResourceHolder<IntBuffer>> baseIntBuffers,
+      CompressedObjectStrategy.CompressionStrategy compression
   )
   {
     this.totalSize = totalSize;
@@ -98,36 +91,55 @@ public class CompressedIntsIndexedSupplier implements WritableSupplier<IndexedIn
   }
 
   @Override
-  public long getSerializedSize() throws IOException
+  public long getSerializedSize()
   {
-    return metaSerdeHelper.size(this) + baseIntBuffers.getSerializedSize();
+    return 1 + // version
+           4 + // totalSize
+           4 + // sizePer
+           1 + // compressionId
+           baseIntBuffers.getSerializedSize(); // data
   }
 
   @Override
-  public void writeTo(WritableByteChannel channel, FileSmoosher smoosher) throws IOException
+  public void writeToChannel(WritableByteChannel channel) throws IOException
   {
-    metaSerdeHelper.writeTo(channel, this);
-    baseIntBuffers.writeTo(channel, smoosher);
+    channel.write(ByteBuffer.wrap(new byte[]{VERSION}));
+    channel.write(ByteBuffer.wrap(Ints.toByteArray(totalSize)));
+    channel.write(ByteBuffer.wrap(Ints.toByteArray(sizePer)));
+    channel.write(ByteBuffer.wrap(new byte[]{compression.getId()}));
+    baseIntBuffers.writeToChannel(channel);
   }
 
-  @VisibleForTesting
-  GenericIndexed<?> getBaseIntBuffers()
+  /**
+   * For testing.  Do not use unless you like things breaking
+   */
+  GenericIndexed<ResourceHolder<IntBuffer>> getBaseIntBuffers()
   {
     return baseIntBuffers;
   }
 
-  public static CompressedIntsIndexedSupplier fromByteBuffer(ByteBuffer buffer, ByteOrder order)
+  public static CompressedIntsIndexedSupplier fromByteBuffer(
+      ByteBuffer buffer,
+      ByteOrder order,
+      SmooshedFileMapper fileMapper
+  )
   {
     byte versionFromBuffer = buffer.get();
 
     if (versionFromBuffer == VERSION) {
       final int totalSize = buffer.getInt();
       final int sizePer = buffer.getInt();
-      final CompressionStrategy compression = CompressionStrategy.forId(buffer.get());
+      final CompressedObjectStrategy.CompressionStrategy compression = CompressedObjectStrategy.CompressionStrategy.forId(
+          buffer.get()
+      );
       return new CompressedIntsIndexedSupplier(
           totalSize,
           sizePer,
-          GenericIndexed.read(buffer, new DecompressingByteBufferObjectStrategy(order, compression)),
+          GenericIndexed.read(
+              buffer,
+              CompressedIntBufferObjectStrategy.getBufferForOrder(order, compression, sizePer),
+              fileMapper
+          ),
           compression
       );
     }
@@ -135,13 +147,8 @@ public class CompressedIntsIndexedSupplier implements WritableSupplier<IndexedIn
     throw new IAE("Unknown version[%s]", versionFromBuffer);
   }
 
-  @VisibleForTesting
-  static CompressedIntsIndexedSupplier fromIntBuffer(
-      final IntBuffer buffer,
-      final int chunkFactor,
-      final ByteOrder byteOrder,
-      final CompressionStrategy compression,
-      final Closer closer
+  public static CompressedIntsIndexedSupplier fromIntBuffer(
+      final IntBuffer buffer, final int chunkFactor, final ByteOrder byteOrder, CompressedObjectStrategy.CompressionStrategy compression
   )
   {
     Preconditions.checkArgument(
@@ -151,20 +158,15 @@ public class CompressedIntsIndexedSupplier implements WritableSupplier<IndexedIn
     return new CompressedIntsIndexedSupplier(
         buffer.remaining(),
         chunkFactor,
-        GenericIndexed.ofCompressedByteBuffers(
-            new Iterable<ByteBuffer>()
+        GenericIndexed.fromIterable(
+            new Iterable<ResourceHolder<IntBuffer>>()
             {
               @Override
-              public Iterator<ByteBuffer> iterator()
+              public Iterator<ResourceHolder<IntBuffer>> iterator()
               {
-                return new Iterator<ByteBuffer>()
+                return new Iterator<ResourceHolder<IntBuffer>>()
                 {
-                  final IntBuffer myBuffer = buffer.asReadOnlyBuffer();
-                  final ByteBuffer retVal = compression
-                      .getCompressor()
-                      .allocateInBuffer(chunkFactor * Ints.BYTES, closer)
-                      .order(byteOrder);
-                  final IntBuffer retValAsIntBuffer = retVal.asIntBuffer();
+                  IntBuffer myBuffer = buffer.asReadOnlyBuffer();
 
                   @Override
                   public boolean hasNext()
@@ -173,17 +175,16 @@ public class CompressedIntsIndexedSupplier implements WritableSupplier<IndexedIn
                   }
 
                   @Override
-                  public ByteBuffer next()
+                  public ResourceHolder<IntBuffer> next()
                   {
-                    int initialLimit = myBuffer.limit();
+                    IntBuffer retVal = myBuffer.asReadOnlyBuffer();
+
                     if (chunkFactor < myBuffer.remaining()) {
-                      myBuffer.limit(myBuffer.position() + chunkFactor);
+                      retVal.limit(retVal.position() + chunkFactor);
                     }
-                    retValAsIntBuffer.clear();
-                    retValAsIntBuffer.put(myBuffer);
-                    myBuffer.limit(initialLimit);
-                    retVal.clear().limit(retValAsIntBuffer.position() * Ints.BYTES);
-                    return retVal;
+                    myBuffer.position(myBuffer.position() + retVal.remaining());
+
+                    return StupidResourceHolder.create(retVal);
                   }
 
                   @Override
@@ -194,22 +195,17 @@ public class CompressedIntsIndexedSupplier implements WritableSupplier<IndexedIn
                 };
               }
             },
-            compression,
-            chunkFactor * Ints.BYTES,
-            byteOrder,
-            closer
+            CompressedIntBufferObjectStrategy.getBufferForOrder(byteOrder, compression, chunkFactor)
         ),
         compression
     );
   }
 
-  @VisibleForTesting
   public static CompressedIntsIndexedSupplier fromList(
-      final IntArrayList list,
+      final List<Integer> list,
       final int chunkFactor,
       final ByteOrder byteOrder,
-      final CompressionStrategy compression,
-      final Closer closer
+      CompressedObjectStrategy.CompressionStrategy compression
   )
   {
     Preconditions.checkArgument(
@@ -219,18 +215,14 @@ public class CompressedIntsIndexedSupplier implements WritableSupplier<IndexedIn
     return new CompressedIntsIndexedSupplier(
         list.size(),
         chunkFactor,
-        GenericIndexed.ofCompressedByteBuffers(
-            new Iterable<ByteBuffer>()
+        GenericIndexed.fromIterable(
+            new Iterable<ResourceHolder<IntBuffer>>()
             {
               @Override
-              public Iterator<ByteBuffer> iterator()
+              public Iterator<ResourceHolder<IntBuffer>> iterator()
               {
-                return new Iterator<ByteBuffer>()
+                return new Iterator<ResourceHolder<IntBuffer>>()
                 {
-                  private final ByteBuffer retVal = compression
-                      .getCompressor()
-                      .allocateInBuffer(chunkFactor * Ints.BYTES, closer)
-                      .order(byteOrder);
                   int position = 0;
 
                   @Override
@@ -240,15 +232,21 @@ public class CompressedIntsIndexedSupplier implements WritableSupplier<IndexedIn
                   }
 
                   @Override
-                  public ByteBuffer next()
+                  public ResourceHolder<IntBuffer> next()
                   {
-                    int blockSize = Math.min(list.size() - position, chunkFactor);
-                    retVal.clear();
-                    for (int limit = position + blockSize; position < limit; position++) {
-                      retVal.putInt(list.getInt(position));
+                    IntBuffer retVal = IntBuffer.allocate(chunkFactor);
+
+                    if (chunkFactor > list.size() - position) {
+                      retVal.limit(list.size() - position);
                     }
-                    retVal.flip();
-                    return retVal;
+                    final List<Integer> ints = list.subList(position, position + retVal.remaining());
+                    for (int value : ints) {
+                      retVal.put(value);
+                    }
+                    retVal.rewind();
+                    position += retVal.remaining();
+
+                    return StupidResourceHolder.create(retVal);
                   }
 
                   @Override
@@ -259,10 +257,7 @@ public class CompressedIntsIndexedSupplier implements WritableSupplier<IndexedIn
                 };
               }
             },
-            compression,
-            chunkFactor * Ints.BYTES,
-            byteOrder,
-            closer
+            CompressedIntBufferObjectStrategy.getBufferForOrder(byteOrder, compression, chunkFactor)
         ),
         compression
     );
@@ -270,10 +265,10 @@ public class CompressedIntsIndexedSupplier implements WritableSupplier<IndexedIn
 
   private class CompressedIndexedInts implements IndexedInts
   {
-    final Indexed<ResourceHolder<ByteBuffer>> singleThreadedIntBuffers = baseIntBuffers.singleThreaded();
+    final Indexed<ResourceHolder<IntBuffer>> singleThreadedIntBuffers = baseIntBuffers.singleThreaded();
 
     int currIndex = -1;
-    ResourceHolder<ByteBuffer> holder;
+    ResourceHolder<IntBuffer> holder;
     IntBuffer buffer;
 
     @Override
@@ -299,7 +294,7 @@ public class CompressedIntsIndexedSupplier implements WritableSupplier<IndexedIn
     {
       CloseQuietly.close(holder);
       holder = singleThreadedIntBuffers.get(bufferNum);
-      buffer = holder.get().asIntBuffer();
+      buffer = holder.get();
       currIndex = bufferNum;
     }
 

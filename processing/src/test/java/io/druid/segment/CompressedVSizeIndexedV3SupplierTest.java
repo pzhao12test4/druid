@@ -21,9 +21,8 @@ package io.druid.segment;
 
 import com.google.common.base.Function;
 import com.google.common.collect.Iterables;
-import io.druid.java.util.common.io.Closer;
+import io.druid.segment.data.CompressedObjectStrategy;
 import io.druid.segment.data.CompressedVSizeIndexedSupplierTest;
-import io.druid.segment.data.CompressionStrategy;
 import io.druid.segment.data.IndexedInts;
 import io.druid.segment.data.IndexedMultivalue;
 import io.druid.segment.data.VSizeIndexedInts;
@@ -31,16 +30,12 @@ import io.druid.segment.data.WritableSupplier;
 import org.junit.After;
 import org.junit.Before;
 
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Arrays;
 
 public class CompressedVSizeIndexedV3SupplierTest extends CompressedVSizeIndexedSupplierTest
 {
-
-  private Closer closer;
-
   @Override
   @Before
   public void setUpSimple()
@@ -51,7 +46,7 @@ public class CompressedVSizeIndexedV3SupplierTest extends CompressedVSizeIndexed
         new int[]{6, 7, 8, 9, 10},
         new int[]{11, 12, 13, 14, 15, 16, 17, 18, 19, 20}
     );
-    closer = Closer.create();
+
     indexedSupplier = CompressedVSizeIndexedV3Supplier.fromIterable(
         Iterables.transform(
             vals,
@@ -64,17 +59,15 @@ public class CompressedVSizeIndexedV3SupplierTest extends CompressedVSizeIndexed
               }
             }
         ), 2, 20, ByteOrder.nativeOrder(),
-        CompressionStrategy.LZ4,
-        closer
+        CompressedObjectStrategy.CompressionStrategy.LZ4
     );
   }
 
   @Override
   @After
-  public void teardown() throws IOException
+  public void teardown()
   {
     indexedSupplier = null;
-    closer.close();
     vals = null;
   }
 
@@ -83,7 +76,8 @@ public class CompressedVSizeIndexedV3SupplierTest extends CompressedVSizeIndexed
   {
     return CompressedVSizeIndexedV3Supplier.fromByteBuffer(
         buffer,
-        ByteOrder.nativeOrder()
+        ByteOrder.nativeOrder(),
+        null
     );
   }
 }

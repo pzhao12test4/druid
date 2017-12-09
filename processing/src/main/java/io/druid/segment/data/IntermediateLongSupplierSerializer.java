@@ -19,15 +19,21 @@
 
 package io.druid.segment.data;
 
+import com.google.common.io.ByteSink;
+import com.google.common.io.CountingOutputStream;
 import com.google.common.math.LongMath;
+import com.google.common.primitives.Longs;
+import io.druid.common.utils.SerializerUtils;
 import io.druid.java.util.common.io.smoosh.FileSmoosher;
-import io.druid.segment.writeout.SegmentWriteOutMedium;
 import it.unimi.dsi.fastutil.longs.Long2IntMap;
 import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongArrayList;
 import it.unimi.dsi.fastutil.longs.LongList;
 
+import java.io.BufferedInputStream;
+import java.io.DataInputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.WritableByteChannel;
 
@@ -36,11 +42,14 @@ import java.nio.channels.WritableByteChannel;
  */
 public class IntermediateLongSupplierSerializer implements LongSupplierSerializer
 {
-  private final SegmentWriteOutMedium segmentWriteOutMedium;
+
+  private final IOPeon ioPeon;
   private final String filenameBase;
+  private final String tempFile;
   private final ByteOrder order;
-  private final CompressionStrategy compression;
-  private LongList tempOut = null;
+  private final CompressedObjectStrategy.CompressionStrategy compression;
+  private CountingOutputStream tempOut = null;
+  private final ByteBuffer helperBuffer = ByteBuffer.allocate(Longs.BYTES);
 
   private int numInserted = 0;
 
@@ -52,14 +61,15 @@ public class IntermediateLongSupplierSerializer implements LongSupplierSerialize
 
   private LongSupplierSerializer delegate;
 
-  IntermediateLongSupplierSerializer(
-      SegmentWriteOutMedium segmentWriteOutMedium,
+  public IntermediateLongSupplierSerializer(
+      IOPeon ioPeon,
       String filenameBase,
       ByteOrder order,
-      CompressionStrategy compression
+      CompressedObjectStrategy.CompressionStrategy compression
   )
   {
-    this.segmentWriteOutMedium = segmentWriteOutMedium;
+    this.ioPeon = ioPeon;
+    this.tempFile = filenameBase + ".temp";
     this.filenameBase = filenameBase;
     this.order = order;
     this.compression = compression;
@@ -68,7 +78,7 @@ public class IntermediateLongSupplierSerializer implements LongSupplierSerialize
   @Override
   public void open() throws IOException
   {
-    tempOut = new LongArrayList();
+    tempOut = new CountingOutputStream(ioPeon.makeOutputStream(tempFile));
   }
 
   @Override
@@ -80,11 +90,7 @@ public class IntermediateLongSupplierSerializer implements LongSupplierSerialize
   @Override
   public void add(long value) throws IOException
   {
-    //noinspection VariableNotUsedInsideIf
-    if (delegate != null) {
-      throw new IllegalStateException("written out already");
-    }
-    tempOut.add(value);
+    SerializerUtils.writeBigEndianLongToOutputStream(tempOut, value, helperBuffer);
     ++numInserted;
     if (uniqueValues.size() <= CompressionFactory.MAX_TABLE_SIZE && !uniqueValues.containsKey(value)) {
       uniqueValues.put(value, uniqueValues.size());
@@ -100,10 +106,6 @@ public class IntermediateLongSupplierSerializer implements LongSupplierSerialize
 
   private void makeDelegate() throws IOException
   {
-    //noinspection VariableNotUsedInsideIf
-    if (delegate != null) {
-      return;
-    }
     CompressionFactory.LongEncodingWriter writer;
     long delta;
     try {
@@ -120,29 +122,51 @@ public class IntermediateLongSupplierSerializer implements LongSupplierSerialize
       writer = new LongsLongEncodingWriter(order);
     }
 
-    if (compression == CompressionStrategy.NONE) {
-      delegate = new EntireLayoutLongSupplierSerializer(segmentWriteOutMedium, writer);
+    if (compression == CompressedObjectStrategy.CompressionStrategy.NONE) {
+      delegate = new EntireLayoutLongSupplierSerializer(
+          ioPeon, filenameBase, writer
+      );
     } else {
-      delegate = new BlockLayoutLongSupplierSerializer(segmentWriteOutMedium, filenameBase, order, writer, compression);
+      delegate = new BlockLayoutLongSupplierSerializer(
+          ioPeon, filenameBase, order, writer, compression
+      );
     }
 
-    delegate.open();
-    for (int i = 0; i < tempOut.size(); i++) {
-      delegate.add(tempOut.getLong(i));
+    try (DataInputStream tempIn = new DataInputStream(new BufferedInputStream(ioPeon.makeInputStream(tempFile)))) {
+      delegate.open();
+      int available = numInserted;
+      while (available > 0) {
+        delegate.add(tempIn.readLong());
+        available--;
+      }
     }
   }
 
   @Override
-  public long getSerializedSize() throws IOException
+  public void closeAndConsolidate(ByteSink consolidatedOut) throws IOException
   {
+    tempOut.close();
     makeDelegate();
+    delegate.closeAndConsolidate(consolidatedOut);
+  }
+
+  @Override
+  public void close() throws IOException
+  {
+    tempOut.close();
+    makeDelegate();
+    delegate.close();
+  }
+
+  @Override
+  public long getSerializedSize()
+  {
     return delegate.getSerializedSize();
   }
 
   @Override
-  public void writeTo(WritableByteChannel channel, FileSmoosher smoosher) throws IOException
+  public void writeToChannel(WritableByteChannel channel, FileSmoosher smoosher) throws IOException
   {
-    makeDelegate();
-    delegate.writeTo(channel, smoosher);
+    delegate.writeToChannel(channel, smoosher);
   }
 }

@@ -21,12 +21,13 @@ package io.druid.segment.data;
 
 import com.google.common.primitives.Ints;
 import com.google.common.primitives.Longs;
+import io.druid.common.utils.SerializerUtils;
 import io.druid.java.util.common.IAE;
-import io.druid.segment.writeout.WriteOutBytes;
 import it.unimi.dsi.fastutil.longs.Long2IntMap;
 import it.unimi.dsi.fastutil.longs.LongList;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.ByteBuffer;
 
 public class TableLongEncodingWriter implements CompressionFactory.LongEncodingWriter
@@ -54,7 +55,7 @@ public class TableLongEncodingWriter implements CompressionFactory.LongEncodingW
   }
 
   @Override
-  public void setOutputStream(WriteOutBytes output)
+  public void setOutputStream(OutputStream output)
   {
     serializer = VSizeLongSerde.getSerializer(bitsPerValue, output);
   }
@@ -74,21 +75,16 @@ public class TableLongEncodingWriter implements CompressionFactory.LongEncodingW
   }
 
   @Override
-  public void putMeta(ByteBuffer metaOut, CompressionStrategy strategy) throws IOException
+  public void putMeta(OutputStream metaOut, CompressedObjectStrategy.CompressionStrategy strategy) throws IOException
   {
-    metaOut.put(CompressionFactory.setEncodingFlag(strategy.getId()));
-    metaOut.put(CompressionFactory.LongEncodingFormat.TABLE.getId());
-    metaOut.put(CompressionFactory.TABLE_ENCODING_VERSION);
-    metaOut.putInt(table.size());
+    metaOut.write(CompressionFactory.setEncodingFlag(strategy.getId()));
+    metaOut.write(CompressionFactory.LongEncodingFormat.TABLE.getId());
+    metaOut.write(CompressionFactory.TABLE_ENCODING_VERSION);
+    metaOut.write(Ints.toByteArray(table.size()));
+    ByteBuffer helperBuffer = ByteBuffer.allocate(Longs.BYTES);
     for (int i = 0; i < valueAddedInOrder.size(); i++) {
-      metaOut.putLong(valueAddedInOrder.getLong(i));
+      SerializerUtils.writeBigEndianLongToOutputStream(metaOut, valueAddedInOrder.getLong(i), helperBuffer);
     }
-  }
-
-  @Override
-  public int metaSize()
-  {
-    return 1 + 1 + 1 + Ints.BYTES + (table.size() * Longs.BYTES);
   }
 
   @Override

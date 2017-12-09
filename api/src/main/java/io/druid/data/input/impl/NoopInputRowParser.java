@@ -21,10 +21,7 @@ package io.druid.data.input.impl;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.google.common.collect.ImmutableList;
 import io.druid.data.input.InputRow;
-
-import java.util.List;
 
 /**
  */
@@ -41,9 +38,9 @@ public class NoopInputRowParser implements InputRowParser<InputRow>
   }
 
   @Override
-  public List<InputRow> parseBatch(InputRow input)
+  public InputRow parse(InputRow input)
   {
-    return ImmutableList.of(input);
+    return input;
   }
 
   @JsonProperty

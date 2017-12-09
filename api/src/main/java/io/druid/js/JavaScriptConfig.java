@@ -35,14 +35,16 @@ public class JavaScriptConfig
   private static final JavaScriptConfig ENABLED_INSTANCE = new JavaScriptConfig(true);
 
   @JsonProperty
-  private final boolean enabled;
+  private boolean enabled = false;
 
   @JsonCreator
   public JavaScriptConfig(
-      @JsonProperty("enabled") boolean enabled
+      @JsonProperty("enabled") Boolean enabled
   )
   {
-    this.enabled = enabled;
+    if (enabled != null) {
+      this.enabled = enabled.booleanValue();
+    }
   }
 
   public boolean isEnabled()

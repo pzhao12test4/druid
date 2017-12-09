@@ -37,7 +37,6 @@ import io.druid.hll.HyperLogLogHash;
 import io.druid.java.util.common.DateTimes;
 import io.druid.java.util.common.Intervals;
 import io.druid.java.util.common.logger.Logger;
-import io.druid.segment.writeout.OffHeapMemorySegmentWriteOutMediumFactory;
 import io.druid.query.aggregation.AggregatorFactory;
 import io.druid.query.aggregation.DoubleMaxAggregatorFactory;
 import io.druid.query.aggregation.DoubleMinAggregatorFactory;
@@ -136,9 +135,8 @@ public class TestIndex
   };
   private static final IndexSpec indexSpec = new IndexSpec();
 
-  private static final IndexMerger INDEX_MERGER =
-      TestHelper.getTestIndexMergerV9(OffHeapMemorySegmentWriteOutMediumFactory.instance());
-  private static final IndexIO INDEX_IO = TestHelper.getTestIndexIO(OffHeapMemorySegmentWriteOutMediumFactory.instance());
+  private static final IndexMerger INDEX_MERGER = TestHelper.getTestIndexMergerV9();
+  private static final IndexIO INDEX_IO = TestHelper.getTestIndexIO();
 
   static {
     if (ComplexMetrics.getSerdeForType("hyperUnique") == null) {
@@ -227,8 +225,8 @@ public class TestIndex
         mergedFile.mkdirs();
         mergedFile.deleteOnExit();
 
-        INDEX_MERGER.persist(top, DATA_INTERVAL, topFile, indexSpec, null);
-        INDEX_MERGER.persist(bottom, DATA_INTERVAL, bottomFile, indexSpec, null);
+        INDEX_MERGER.persist(top, DATA_INTERVAL, topFile, indexSpec);
+        INDEX_MERGER.persist(bottom, DATA_INTERVAL, bottomFile, indexSpec);
 
         mergedRealtime = INDEX_IO.loadIndex(
             INDEX_MERGER.mergeQueryableIndex(
@@ -236,8 +234,7 @@ public class TestIndex
                 true,
                 METRIC_AGGS,
                 mergedFile,
-                indexSpec,
-                null
+                indexSpec
             )
         );
 
@@ -365,7 +362,7 @@ public class TestIndex
       someTmpFile.mkdirs();
       someTmpFile.deleteOnExit();
 
-      INDEX_MERGER.persist(index, someTmpFile, indexSpec, null);
+      INDEX_MERGER.persist(index, someTmpFile, indexSpec);
       return INDEX_IO.loadIndex(someTmpFile);
     }
     catch (IOException e) {

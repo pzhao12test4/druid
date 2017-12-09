@@ -20,40 +20,32 @@
 package io.druid.segment.data;
 
 import com.google.common.base.Supplier;
-import io.druid.io.Channels;
+import com.google.common.primitives.Ints;
 import io.druid.java.util.common.IAE;
-import io.druid.java.util.common.io.smoosh.FileSmoosher;
-import io.druid.segment.serde.MetaSerdeHelper;
-import io.druid.segment.serde.Serializer;
+import io.druid.java.util.common.io.smoosh.SmooshedFileMapper;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.WritableByteChannel;
 
-public class CompressedFloatsIndexedSupplier implements Supplier<IndexedFloats>, Serializer
+public class CompressedFloatsIndexedSupplier implements Supplier<IndexedFloats>
 {
   public static final byte LZF_VERSION = 0x1;
-  public static final byte VERSION = 0x2;
-
-  private static final MetaSerdeHelper<CompressedFloatsIndexedSupplier> metaSerdeHelper = MetaSerdeHelper
-      .firstWriteByte((CompressedFloatsIndexedSupplier x) -> VERSION)
-      .writeInt(x -> x.totalSize)
-      .writeInt(x -> x.sizePer)
-      .writeByte(x -> x.compression.getId());
+  public static final byte version = 0x2;
 
   private final int totalSize;
   private final int sizePer;
   private final ByteBuffer buffer;
   private final Supplier<IndexedFloats> supplier;
-  private final CompressionStrategy compression;
+  private final CompressedObjectStrategy.CompressionStrategy compression;
 
   CompressedFloatsIndexedSupplier(
       int totalSize,
       int sizePer,
       ByteBuffer buffer,
       Supplier<IndexedFloats> supplier,
-      CompressionStrategy compression
+      CompressedObjectStrategy.CompressionStrategy compression
   )
   {
     this.totalSize = totalSize;
@@ -69,37 +61,43 @@ public class CompressedFloatsIndexedSupplier implements Supplier<IndexedFloats>,
     return supplier.get();
   }
 
-  @Override
-  public long getSerializedSize() throws IOException
+  public long getSerializedSize()
   {
-    return metaSerdeHelper.size(this) + (long) buffer.remaining();
+    return buffer.remaining() + 1 + 4 + 4 + 1;
   }
 
-  @Override
-  public void writeTo(WritableByteChannel channel, FileSmoosher smoosher) throws IOException
+  public void writeToChannel(WritableByteChannel channel) throws IOException
   {
-    metaSerdeHelper.writeTo(channel, this);
-    Channels.writeFully(channel, buffer.asReadOnlyBuffer());
+    channel.write(ByteBuffer.wrap(new byte[]{version}));
+    channel.write(ByteBuffer.wrap(Ints.toByteArray(totalSize)));
+    channel.write(ByteBuffer.wrap(Ints.toByteArray(sizePer)));
+    channel.write(ByteBuffer.wrap(new byte[]{compression.getId()}));
+    channel.write(buffer.asReadOnlyBuffer());
   }
 
-  public static CompressedFloatsIndexedSupplier fromByteBuffer(ByteBuffer buffer, ByteOrder order)
+  public static CompressedFloatsIndexedSupplier fromByteBuffer(
+      ByteBuffer buffer,
+      ByteOrder order,
+      SmooshedFileMapper mapper
+  )
   {
     byte versionFromBuffer = buffer.get();
 
-    if (versionFromBuffer == LZF_VERSION || versionFromBuffer == VERSION) {
+    if (versionFromBuffer == LZF_VERSION || versionFromBuffer == version) {
       final int totalSize = buffer.getInt();
       final int sizePer = buffer.getInt();
-      CompressionStrategy compression = CompressionStrategy.LZF;
-      if (versionFromBuffer == VERSION) {
+      CompressedObjectStrategy.CompressionStrategy compression = CompressedObjectStrategy.CompressionStrategy.LZF;
+      if (versionFromBuffer == version) {
         byte compressionId = buffer.get();
-        compression = CompressionStrategy.forId(compressionId);
+        compression = CompressedObjectStrategy.CompressionStrategy.forId(compressionId);
       }
       Supplier<IndexedFloats> supplier = CompressionFactory.getFloatSupplier(
           totalSize,
           sizePer,
           buffer.asReadOnlyBuffer(),
           order,
-          compression
+          compression,
+          mapper
       );
       return new CompressedFloatsIndexedSupplier(
           totalSize,

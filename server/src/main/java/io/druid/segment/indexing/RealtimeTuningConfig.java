@@ -23,7 +23,6 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.base.Preconditions;
 import com.google.common.io.Files;
-import io.druid.segment.writeout.SegmentWriteOutMediumFactory;
 import io.druid.segment.IndexSpec;
 import io.druid.segment.realtime.appenderator.AppenderatorConfig;
 import io.druid.segment.realtime.plumber.IntervalStartVersioningPolicy;
@@ -34,7 +33,6 @@ import io.druid.timeline.partition.NoneShardSpec;
 import io.druid.timeline.partition.ShardSpec;
 import org.joda.time.Period;
 
-import javax.annotation.Nullable;
 import java.io.File;
 
 /**
@@ -59,7 +57,7 @@ public class RealtimeTuningConfig implements TuningConfig, AppenderatorConfig
   }
 
   // Might make sense for this to be a builder
-  public static RealtimeTuningConfig makeDefaultTuningConfig(final @Nullable File basePersistDirectory)
+  public static RealtimeTuningConfig makeDefaultTuningConfig(final File basePersistDirectory)
   {
     return new RealtimeTuningConfig(
         defaultMaxRowsInMemory,
@@ -76,8 +74,7 @@ public class RealtimeTuningConfig implements TuningConfig, AppenderatorConfig
         0,
         defaultReportParseExceptions,
         defaultHandoffConditionTimeout,
-        defaultAlertTimeout,
-        null
+        defaultAlertTimeout
     );
   }
 
@@ -95,8 +92,6 @@ public class RealtimeTuningConfig implements TuningConfig, AppenderatorConfig
   private final boolean reportParseExceptions;
   private final long handoffConditionTimeout;
   private final long alertTimeout;
-  @Nullable
-  private final SegmentWriteOutMediumFactory segmentWriteOutMediumFactory;
 
   @JsonCreator
   public RealtimeTuningConfig(
@@ -115,8 +110,7 @@ public class RealtimeTuningConfig implements TuningConfig, AppenderatorConfig
       @JsonProperty("mergeThreadPriority") int mergeThreadPriority,
       @JsonProperty("reportParseExceptions") Boolean reportParseExceptions,
       @JsonProperty("handoffConditionTimeout") Long handoffConditionTimeout,
-      @JsonProperty("alertTimeout") Long alertTimeout,
-      @JsonProperty("segmentWriteOutMediumFactory") @Nullable SegmentWriteOutMediumFactory segmentWriteOutMediumFactory
+      @JsonProperty("alertTimeout") Long alertTimeout
   )
   {
     this.maxRowsInMemory = maxRowsInMemory == null ? defaultMaxRowsInMemory : maxRowsInMemory;
@@ -144,7 +138,6 @@ public class RealtimeTuningConfig implements TuningConfig, AppenderatorConfig
 
     this.alertTimeout = alertTimeout == null ? defaultAlertTimeout : alertTimeout;
     Preconditions.checkArgument(this.alertTimeout >= 0, "alertTimeout must be >= 0");
-    this.segmentWriteOutMediumFactory = segmentWriteOutMediumFactory;
   }
 
   @Override
@@ -247,14 +240,6 @@ public class RealtimeTuningConfig implements TuningConfig, AppenderatorConfig
     return alertTimeout;
   }
 
-  @Override
-  @JsonProperty
-  @Nullable
-  public SegmentWriteOutMediumFactory getSegmentWriteOutMediumFactory()
-  {
-    return segmentWriteOutMediumFactory;
-  }
-
   public RealtimeTuningConfig withVersioningPolicy(VersioningPolicy policy)
   {
     return new RealtimeTuningConfig(
@@ -272,8 +257,7 @@ public class RealtimeTuningConfig implements TuningConfig, AppenderatorConfig
         mergeThreadPriority,
         reportParseExceptions,
         handoffConditionTimeout,
-        alertTimeout,
-        segmentWriteOutMediumFactory
+        alertTimeout
     );
   }
 
@@ -294,8 +278,7 @@ public class RealtimeTuningConfig implements TuningConfig, AppenderatorConfig
         mergeThreadPriority,
         reportParseExceptions,
         handoffConditionTimeout,
-        alertTimeout,
-        segmentWriteOutMediumFactory
+        alertTimeout
     );
   }
 }

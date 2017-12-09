@@ -49,7 +49,6 @@ import io.druid.java.util.common.guava.Sequence;
 import io.druid.java.util.common.guava.Sequences;
 import io.druid.java.util.common.logger.Logger;
 import io.druid.math.expr.ExprMacroTable;
-import io.druid.segment.writeout.OffHeapMemorySegmentWriteOutMediumFactory;
 import io.druid.query.BySegmentQueryRunner;
 import io.druid.query.DruidProcessingConfig;
 import io.druid.query.FinalizeResultsQueryRunner;
@@ -125,7 +124,6 @@ public class GroupByLimitPushDownMultiNodeMergeTest
     );
     INDEX_IO = new IndexIO(
         JSON_MAPPER,
-        OffHeapMemorySegmentWriteOutMediumFactory.instance(),
         new ColumnConfig()
         {
           @Override
@@ -135,7 +133,7 @@ public class GroupByLimitPushDownMultiNodeMergeTest
           }
         }
     );
-    INDEX_MERGER_V9 = new IndexMergerV9(JSON_MAPPER, INDEX_IO, OffHeapMemorySegmentWriteOutMediumFactory.instance());
+    INDEX_MERGER_V9 = new IndexMergerV9(JSON_MAPPER, INDEX_IO);
   }
 
   private IncrementalIndex makeIncIndex(boolean withRollup)
@@ -199,8 +197,7 @@ public class GroupByLimitPushDownMultiNodeMergeTest
     final File fileA = INDEX_MERGER_V9.persist(
         indexA,
         new File(tmpDir, "A"),
-        new IndexSpec(),
-        null
+        new IndexSpec()
     );
     QueryableIndex qindexA = INDEX_IO.loadIndex(fileA);
 
@@ -235,8 +232,7 @@ public class GroupByLimitPushDownMultiNodeMergeTest
     final File fileB = INDEX_MERGER_V9.persist(
         indexB,
         new File(tmpDir, "B"),
-        new IndexSpec(),
-        null
+        new IndexSpec()
     );
     QueryableIndex qindexB = INDEX_IO.loadIndex(fileB);
 

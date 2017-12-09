@@ -31,7 +31,7 @@ import java.util.List;
 
 /**
  */
-public class SegmentListUsedActionSerdeTest
+public class SegmentListUsedActionTest
 {
   private static final ObjectMapper MAPPER = TestUtil.MAPPER;
 

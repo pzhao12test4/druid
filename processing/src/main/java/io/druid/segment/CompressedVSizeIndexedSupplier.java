@@ -19,26 +19,23 @@
 
 package io.druid.segment;
 
-import com.google.common.annotations.VisibleForTesting;
-import io.druid.io.Channels;
 import io.druid.java.util.common.IAE;
-import io.druid.java.util.common.io.Closer;
-import io.druid.java.util.common.io.smoosh.FileSmoosher;
+import io.druid.java.util.common.io.smoosh.SmooshedFileMapper;
 import io.druid.query.monomorphicprocessing.RuntimeShapeInspector;
+import io.druid.segment.data.CompressedObjectStrategy;
 import io.druid.segment.data.CompressedVSizeIntsIndexedSupplier;
-import io.druid.segment.data.CompressionStrategy;
 import io.druid.segment.data.IndexedInts;
 import io.druid.segment.data.IndexedIterable;
 import io.druid.segment.data.IndexedMultivalue;
 import io.druid.segment.data.WritableSupplier;
-import it.unimi.dsi.fastutil.ints.IntArrayList;
-import it.unimi.dsi.fastutil.ints.IntList;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.WritableByteChannel;
+import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 
 /**
  * Format -
@@ -58,7 +55,7 @@ public class CompressedVSizeIndexedSupplier implements WritableSupplier<IndexedM
   //values - indexed integers representing actual values in each row
   private final CompressedVSizeIntsIndexedSupplier valueSupplier;
 
-  private CompressedVSizeIndexedSupplier(
+  CompressedVSizeIndexedSupplier(
       CompressedVSizeIntsIndexedSupplier offsetSupplier,
       CompressedVSizeIntsIndexedSupplier valueSupplier
   )
@@ -68,49 +65,49 @@ public class CompressedVSizeIndexedSupplier implements WritableSupplier<IndexedM
   }
 
   @Override
-  public long getSerializedSize() throws IOException
+  public long getSerializedSize()
   {
     return 1 + offsetSupplier.getSerializedSize() + valueSupplier.getSerializedSize();
   }
 
   @Override
-  public void writeTo(WritableByteChannel channel, FileSmoosher smoosher) throws IOException
+  public void writeToChannel(WritableByteChannel channel) throws IOException
   {
-    Channels.writeFully(channel, ByteBuffer.wrap(new byte[]{version}));
-    offsetSupplier.writeTo(channel, smoosher);
-    valueSupplier.writeTo(channel, smoosher);
+    channel.write(ByteBuffer.wrap(new byte[]{version}));
+    offsetSupplier.writeToChannel(channel);
+    valueSupplier.writeToChannel(channel);
   }
 
-  public static CompressedVSizeIndexedSupplier fromByteBuffer(ByteBuffer buffer, ByteOrder order)
+  public static CompressedVSizeIndexedSupplier fromByteBuffer(ByteBuffer buffer, ByteOrder order, SmooshedFileMapper fileMapper)
   {
     byte versionFromBuffer = buffer.get();
 
     if (versionFromBuffer == version) {
       CompressedVSizeIntsIndexedSupplier offsetSupplier = CompressedVSizeIntsIndexedSupplier.fromByteBuffer(
           buffer,
-          order
+          order,
+          fileMapper
       );
       CompressedVSizeIntsIndexedSupplier valueSupplier = CompressedVSizeIntsIndexedSupplier.fromByteBuffer(
           buffer,
-          order
+          order,
+          fileMapper
       );
       return new CompressedVSizeIndexedSupplier(offsetSupplier, valueSupplier);
     }
     throw new IAE("Unknown version[%s]", versionFromBuffer);
   }
 
-  @VisibleForTesting
   public static CompressedVSizeIndexedSupplier fromIterable(
-      final Iterable<IndexedInts> objectsIterable,
-      final int maxValue,
+      Iterable<IndexedInts> objectsIterable,
+      int maxValue,
       final ByteOrder byteOrder,
-      final CompressionStrategy compression,
-      final Closer closer
+      CompressedObjectStrategy.CompressionStrategy compression
   )
   {
     Iterator<IndexedInts> objects = objectsIterable.iterator();
-    IntList offsetList = new IntArrayList();
-    IntList values = new IntArrayList();
+    List<Integer> offsetList = new ArrayList<>();
+    List<Integer> values = new ArrayList<>();
 
     int offset = 0;
     while (objects.hasNext()) {
@@ -128,16 +125,14 @@ public class CompressedVSizeIndexedSupplier implements WritableSupplier<IndexedM
         offsetMax,
         CompressedVSizeIntsIndexedSupplier.maxIntsInBufferForValue(offsetMax),
         byteOrder,
-        compression,
-        closer
+        compression
     );
     CompressedVSizeIntsIndexedSupplier valuesSupplier = CompressedVSizeIntsIndexedSupplier.fromList(
         values,
         maxValue,
         CompressedVSizeIntsIndexedSupplier.maxIntsInBufferForValue(maxValue),
         byteOrder,
-        compression,
-        closer
+        compression
     );
     return new CompressedVSizeIndexedSupplier(headerSupplier, valuesSupplier);
   }

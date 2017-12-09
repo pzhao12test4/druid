@@ -31,11 +31,10 @@ import io.druid.segment.BaseDoubleColumnValueSelector;
 import io.druid.segment.BaseFloatColumnValueSelector;
 import io.druid.segment.BaseLongColumnValueSelector;
 import io.druid.segment.ColumnSelectorFactory;
-import io.druid.segment.ColumnValueSelector;
 import io.druid.segment.DoubleColumnSelector;
 import io.druid.segment.FloatColumnSelector;
 import io.druid.segment.LongColumnSelector;
-import io.druid.segment.virtual.ExpressionSelectors;
+import io.druid.segment.virtual.ExpressionObjectSelector;
 
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -73,14 +72,6 @@ public class AggregatorUtil
   public static final byte LONG_LAST_CACHE_TYPE_ID = 0x18;
   public static final byte TIMESTAMP_CACHE_TYPE_ID = 0x19;
   public static final byte VARIANCE_CACHE_TYPE_ID = 0x1A;
-
-  // Quantiles sketch aggregator
-  public static final byte QUANTILES_DOUBLES_SKETCH_BUILD_CACHE_TYPE_ID = 0x1B;
-  public static final byte QUANTILES_DOUBLES_SKETCH_MERGE_CACHE_TYPE_ID = 0x1C;
-  public static final byte QUANTILES_DOUBLES_SKETCH_TO_HISTOGRAM_CACHE_TYPE_ID = 0x1D;
-  public static final byte QUANTILES_DOUBLES_SKETCH_TO_QUANTILE_CACHE_TYPE_ID = 0x1E;
-  public static final byte QUANTILES_DOUBLES_SKETCH_TO_QUANTILES_CACHE_TYPE_ID = 0x1F;
-  public static final byte QUANTILES_DOUBLES_SKETCH_TO_STRING_CACHE_TYPE_ID = 0x20;
 
   /**
    * returns the list of dependent postAggregators that should be calculated in order to calculate given postAgg
@@ -149,7 +140,7 @@ public class AggregatorUtil
     }
     if (fieldName == null && fieldExpression != null) {
       final Expr expr = Parser.parse(fieldExpression, macroTable);
-      final ColumnValueSelector<ExprEval> baseSelector = ExpressionSelectors.makeExprEvalSelector(metricFactory, expr);
+      final ExpressionObjectSelector baseSelector = ExpressionObjectSelector.from(metricFactory, expr);
       class ExpressionFloatColumnSelector implements FloatColumnSelector
       {
         @Override
@@ -183,7 +174,7 @@ public class AggregatorUtil
     }
     if (fieldName == null && fieldExpression != null) {
       final Expr expr = Parser.parse(fieldExpression, macroTable);
-      final ColumnValueSelector<ExprEval> baseSelector = ExpressionSelectors.makeExprEvalSelector(metricFactory, expr);
+      final ExpressionObjectSelector baseSelector = ExpressionObjectSelector.from(metricFactory, expr);
       class ExpressionLongColumnSelector implements LongColumnSelector
       {
         @Override
@@ -217,7 +208,7 @@ public class AggregatorUtil
     }
     if (fieldName == null && fieldExpression != null) {
       final Expr expr = Parser.parse(fieldExpression, macroTable);
-      final ColumnValueSelector<ExprEval> baseSelector = ExpressionSelectors.makeExprEvalSelector(metricFactory, expr);
+      final ExpressionObjectSelector baseSelector = ExpressionObjectSelector.from(metricFactory, expr);
       class ExpressionDoubleColumnSelector implements DoubleColumnSelector
       {
         @Override

@@ -28,8 +28,6 @@ import org.joda.time.DateTimeZone;
 import org.joda.time.Period;
 import org.joda.time.chrono.ISOChronology;
 
-import javax.annotation.Nullable;
-
 public class ExprUtils
 {
   private static final Expr.ObjectBinding NIL_BINDINGS = name -> null;
@@ -51,8 +49,8 @@ public class ExprUtils
 
   public static PeriodGranularity toPeriodGranularity(
       final Expr periodArg,
-      @Nullable final Expr originArg,
-      @Nullable final Expr timeZoneArg,
+      final Expr originArg,
+      final Expr timeZoneArg,
       final Expr.ObjectBinding bindings
   )
   {

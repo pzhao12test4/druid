@@ -21,9 +21,9 @@ package io.druid.segment;
 
 import io.druid.segment.column.ColumnDescriptor;
 import io.druid.segment.column.ValueType;
-import io.druid.segment.data.CompressionStrategy;
+import io.druid.segment.data.CompressedObjectStrategy;
+import io.druid.segment.data.IOPeon;
 import io.druid.segment.serde.FloatGenericColumnPartSerde;
-import io.druid.segment.writeout.SegmentWriteOutMedium;
 
 import java.io.IOException;
 import java.nio.IntBuffer;
@@ -33,29 +33,32 @@ public class FloatDimensionMergerV9 implements DimensionMergerV9<Float>
 {
   protected String dimensionName;
   protected final IndexSpec indexSpec;
+  protected IOPeon ioPeon;
+
   private FloatColumnSerializer serializer;
 
   public FloatDimensionMergerV9(
       String dimensionName,
       IndexSpec indexSpec,
-      SegmentWriteOutMedium segmentWriteOutMedium
+      IOPeon ioPeon
   )
   {
     this.dimensionName = dimensionName;
     this.indexSpec = indexSpec;
+    this.ioPeon = ioPeon;
 
     try {
-      setupEncodedValueWriter(segmentWriteOutMedium);
+      setupEncodedValueWriter();
     }
     catch (IOException ioe) {
       throw new RuntimeException(ioe);
     }
   }
 
-  private void setupEncodedValueWriter(SegmentWriteOutMedium segmentWriteOutMedium) throws IOException
+  protected void setupEncodedValueWriter() throws IOException
   {
-    final CompressionStrategy metCompression = indexSpec.getMetricCompression();
-    this.serializer = FloatColumnSerializer.create(segmentWriteOutMedium, dimensionName, metCompression);
+    final CompressedObjectStrategy.CompressionStrategy metCompression = indexSpec.getMetricCompression();
+    this.serializer = FloatColumnSerializer.create(ioPeon, dimensionName, metCompression);
     serializer.open();
   }
 
@@ -93,6 +96,7 @@ public class FloatDimensionMergerV9 implements DimensionMergerV9<Float>
   @Override
   public ColumnDescriptor makeColumnDescriptor() throws IOException
   {
+    serializer.close();
     final ColumnDescriptor.Builder builder = ColumnDescriptor.builder();
     builder.setValueType(ValueType.FLOAT);
     builder.addSerde(

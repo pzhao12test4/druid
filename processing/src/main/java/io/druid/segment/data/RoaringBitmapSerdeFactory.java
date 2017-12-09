@@ -68,7 +68,8 @@ public class RoaringBitmapSerdeFactory implements BitmapSerdeFactory
     return bitmapFactory;
   }
 
-  private static class ImmutableRoaringBitmapObjectStrategy implements ObjectStrategy<ImmutableBitmap>
+  private static class ImmutableRoaringBitmapObjectStrategy
+      implements ObjectStrategy<ImmutableBitmap>
   {
     @Override
     public Class<ImmutableBitmap> getClazz()

@@ -19,6 +19,8 @@
 
 package io.druid.segment.data;
 
+import com.google.common.primitives.Longs;
+
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.LongBuffer;
@@ -47,6 +49,12 @@ public class LongsLongEncodingReader implements CompressionFactory.LongEncodingR
   public long read(int index)
   {
     return buffer.get(buffer.position() + index);
+  }
+
+  @Override
+  public int getNumBytes(int values)
+  {
+    return values * Longs.BYTES;
   }
 
   @Override

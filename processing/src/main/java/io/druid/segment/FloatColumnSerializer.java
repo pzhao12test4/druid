@@ -21,10 +21,10 @@ package io.druid.segment;
 
 import io.druid.java.util.common.StringUtils;
 import io.druid.java.util.common.io.smoosh.FileSmoosher;
-import io.druid.segment.writeout.SegmentWriteOutMedium;
+import io.druid.segment.data.CompressedObjectStrategy;
 import io.druid.segment.data.CompressionFactory;
-import io.druid.segment.data.CompressionStrategy;
 import io.druid.segment.data.FloatSupplierSerializer;
+import io.druid.segment.data.IOPeon;
 
 import java.io.IOException;
 import java.nio.ByteOrder;
@@ -33,28 +33,28 @@ import java.nio.channels.WritableByteChannel;
 public class FloatColumnSerializer implements GenericColumnSerializer
 {
   public static FloatColumnSerializer create(
-      SegmentWriteOutMedium segmentWriteOutMedium,
+      IOPeon ioPeon,
       String filenameBase,
-      CompressionStrategy compression
+      CompressedObjectStrategy.CompressionStrategy compression
   )
   {
-    return new FloatColumnSerializer(segmentWriteOutMedium, filenameBase, IndexIO.BYTE_ORDER, compression);
+    return new FloatColumnSerializer(ioPeon, filenameBase, IndexIO.BYTE_ORDER, compression);
   }
 
-  private final SegmentWriteOutMedium segmentWriteOutMedium;
+  private final IOPeon ioPeon;
   private final String filenameBase;
   private final ByteOrder byteOrder;
-  private final CompressionStrategy compression;
+  private final CompressedObjectStrategy.CompressionStrategy compression;
   private FloatSupplierSerializer writer;
 
-  private FloatColumnSerializer(
-      SegmentWriteOutMedium segmentWriteOutMedium,
+  public FloatColumnSerializer(
+      IOPeon ioPeon,
       String filenameBase,
       ByteOrder byteOrder,
-      CompressionStrategy compression
+      CompressedObjectStrategy.CompressionStrategy compression
   )
   {
-    this.segmentWriteOutMedium = segmentWriteOutMedium;
+    this.ioPeon = ioPeon;
     this.filenameBase = filenameBase;
     this.byteOrder = byteOrder;
     this.compression = compression;
@@ -64,7 +64,7 @@ public class FloatColumnSerializer implements GenericColumnSerializer
   public void open() throws IOException
   {
     writer = CompressionFactory.getFloatSerializer(
-        segmentWriteOutMedium,
+        ioPeon,
         StringUtils.format("%s.float_column", filenameBase),
         byteOrder,
         compression
@@ -80,14 +80,21 @@ public class FloatColumnSerializer implements GenericColumnSerializer
   }
 
   @Override
-  public long getSerializedSize() throws IOException
+  public void close() throws IOException
+  {
+    writer.close();
+  }
+
+  @Override
+  public long getSerializedSize()
   {
     return writer.getSerializedSize();
   }
 
   @Override
-  public void writeTo(WritableByteChannel channel, FileSmoosher smoosher) throws IOException
+  public void writeToChannel(WritableByteChannel channel, FileSmoosher smoosher) throws IOException
   {
-    writer.writeTo(channel, smoosher);
+    writer.writeToChannel(channel, smoosher);
   }
+
 }

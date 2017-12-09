@@ -28,6 +28,9 @@ package io.druid.segment;
  */
 public interface FloatColumnSelector extends ColumnValueSelector<Float>
 {
+  @Override
+  float getFloat();
+
   /**
    * @deprecated This method is marked as deprecated in FloatColumnSelector to minimize the probability of accidential
    * calling. "Polymorphism" of FloatColumnSelector should be used only when operating on {@link ColumnValueSelector}

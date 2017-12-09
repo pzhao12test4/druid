@@ -26,6 +26,7 @@ import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+
 import io.druid.data.input.InputRow;
 import io.druid.java.util.common.IAE;
 import io.druid.java.util.common.ISE;
@@ -139,7 +140,7 @@ public class Sink implements Iterable<FireHydrant>
     return currHydrant;
   }
 
-  public int add(InputRow row, boolean skipMaxRowsInMemoryCheck) throws IndexSizeExceededException
+  public int add(InputRow row) throws IndexSizeExceededException
   {
     if (currHydrant == null) {
       throw new IAE("No currHydrant but given row[%s]", row);
@@ -154,7 +155,7 @@ public class Sink implements Iterable<FireHydrant>
       if (index == null) {
         return ADD_FAILED; // the hydrant was swapped without being replaced
       }
-      return index.add(row, skipMaxRowsInMemoryCheck);
+      return index.add(row);
     }
   }
 

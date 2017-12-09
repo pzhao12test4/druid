@@ -20,14 +20,11 @@
 package io.druid.segment.data;
 
 import com.google.common.primitives.Ints;
-import io.druid.common.utils.ByteUtils;
-import io.druid.io.Channels;
+import io.druid.common.utils.SerializerUtils;
+import io.druid.io.ZeroCopyByteArrayOutputStream;
 import io.druid.java.util.common.IAE;
 import io.druid.java.util.common.ISE;
-import io.druid.java.util.common.io.smoosh.FileSmoosher;
-import io.druid.segment.writeout.HeapByteBufferWriteOutBytes;
 import io.druid.query.monomorphicprocessing.RuntimeShapeInspector;
-import io.druid.segment.serde.MetaSerdeHelper;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -36,22 +33,17 @@ import java.util.Iterator;
 
 /**
  */
-public class VSizeIndexed implements IndexedMultivalue<IndexedInts>, WritableSupplier<IndexedMultivalue<IndexedInts>>
+public class VSizeIndexed implements IndexedMultivalue<IndexedInts>
 {
-  private static final byte VERSION = 0x1;
-
-  private static final MetaSerdeHelper<VSizeIndexed> metaSerdeHelper = MetaSerdeHelper
-      .firstWriteByte((VSizeIndexed x) -> VERSION)
-      .writeByte(x -> ByteUtils.checkedCast(x.numBytes))
-      .writeInt(x -> Ints.checkedCast(x.theBuffer.remaining() + (long) Integer.BYTES))
-      .writeInt(x -> x.size);
+  private static final byte version = 0x1;
 
   public static VSizeIndexed fromIterable(Iterable<VSizeIndexedInts> objectsIterable)
   {
     Iterator<VSizeIndexedInts> objects = objectsIterable.iterator();
     if (!objects.hasNext()) {
-      final ByteBuffer buffer = ByteBuffer.allocate(Ints.BYTES).putInt(0, 0);
-      return new VSizeIndexed(buffer, Ints.BYTES);
+      final ByteBuffer buffer = ByteBuffer.allocate(4).putInt(0);
+      buffer.flip();
+      return new VSizeIndexed(buffer, 4);
     }
 
     int numBytes = -1;
@@ -65,27 +57,29 @@ public class VSizeIndexed implements IndexedMultivalue<IndexedInts>, WritableSup
       ++count;
     }
 
-    HeapByteBufferWriteOutBytes headerBytes = new HeapByteBufferWriteOutBytes();
-    HeapByteBufferWriteOutBytes valueBytes = new HeapByteBufferWriteOutBytes();
+    ZeroCopyByteArrayOutputStream headerBytes = new ZeroCopyByteArrayOutputStream(4 + (count * 4));
+    ZeroCopyByteArrayOutputStream valueBytes = new ZeroCopyByteArrayOutputStream();
+    ByteBuffer helperBuffer = ByteBuffer.allocate(Ints.BYTES);
     int offset = 0;
     try {
-      headerBytes.writeInt(count);
+      SerializerUtils.writeBigEndianIntToOutputStream(headerBytes, count, helperBuffer);
 
       for (VSizeIndexedInts object : objectsIterable) {
         if (object.getNumBytes() != numBytes) {
           throw new ISE("val.numBytes[%s] != numBytesInValue[%s]", object.getNumBytes(), numBytes);
         }
-        offset += object.getNumBytesNoPadding();
-        headerBytes.writeInt(offset);
-        object.writeBytesNoPaddingTo(valueBytes);
+        byte[] bytes = object.getBytesNoPadding();
+        offset += bytes.length;
+        SerializerUtils.writeBigEndianIntToOutputStream(headerBytes, offset, helperBuffer);
+        valueBytes.write(bytes);
       }
-      valueBytes.write(new byte[Ints.BYTES - numBytes]);
+      valueBytes.write(new byte[4 - numBytes]);
     }
     catch (IOException e) {
       throw new RuntimeException(e);
     }
 
-    ByteBuffer theBuffer = ByteBuffer.allocate(Ints.checkedCast(headerBytes.size() + valueBytes.size()));
+    ByteBuffer theBuffer = ByteBuffer.allocate(headerBytes.size() + valueBytes.size());
     headerBytes.writeTo(theBuffer);
     valueBytes.writeTo(theBuffer);
     theBuffer.flip();
@@ -155,30 +149,24 @@ public class VSizeIndexed implements IndexedMultivalue<IndexedInts>, WritableSup
     throw new UnsupportedOperationException("Reverse lookup not allowed.");
   }
 
-  @Override
-  public long getSerializedSize() throws IOException
+  public int getSerializedSize()
   {
-    return metaSerdeHelper.size(this) + (long) theBuffer.remaining();
+    return theBuffer.remaining() + 4 + 4 + 2;
   }
 
-  @Override
-  public void writeTo(WritableByteChannel channel, FileSmoosher smoosher) throws IOException
+  public void writeToChannel(WritableByteChannel channel) throws IOException
   {
-    metaSerdeHelper.writeTo(channel, this);
-    Channels.writeFully(channel, theBuffer.asReadOnlyBuffer());
-  }
-
-  @Override
-  public IndexedMultivalue<IndexedInts> get()
-  {
-    return this;
+    channel.write(ByteBuffer.wrap(new byte[]{version, (byte) numBytes}));
+    channel.write(ByteBuffer.wrap(Ints.toByteArray(theBuffer.remaining() + 4)));
+    channel.write(ByteBuffer.wrap(Ints.toByteArray(size)));
+    channel.write(theBuffer.asReadOnlyBuffer());
   }
 
   public static VSizeIndexed readFromByteBuffer(ByteBuffer buffer)
   {
     byte versionFromBuffer = buffer.get();
 
-    if (VERSION == versionFromBuffer) {
+    if (version == versionFromBuffer) {
       int numBytes = buffer.get();
       int size = buffer.getInt();
       ByteBuffer bufferToUse = buffer.asReadOnlyBuffer();
@@ -207,5 +195,38 @@ public class VSizeIndexed implements IndexedMultivalue<IndexedInts>, WritableSup
   public void inspectRuntimeShape(RuntimeShapeInspector inspector)
   {
     inspector.visit("theBuffer", theBuffer);
+  }
+
+  public WritableSupplier<IndexedMultivalue<IndexedInts>> asWritableSupplier()
+  {
+    return new VSizeIndexedSupplier(this);
+  }
+
+  public static class VSizeIndexedSupplier implements WritableSupplier<IndexedMultivalue<IndexedInts>>
+  {
+    final VSizeIndexed delegate;
+
+    public VSizeIndexedSupplier(VSizeIndexed delegate)
+    {
+      this.delegate = delegate;
+    }
+
+    @Override
+    public long getSerializedSize()
+    {
+      return delegate.getSerializedSize();
+    }
+
+    @Override
+    public void writeToChannel(WritableByteChannel channel) throws IOException
+    {
+      delegate.writeToChannel(channel);
+    }
+
+    @Override
+    public IndexedMultivalue<IndexedInts> get()
+    {
+      return delegate;
+    }
   }
 }

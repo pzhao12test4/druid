@@ -20,10 +20,6 @@
 package io.druid.segment.data;
 
 import com.google.common.primitives.Ints;
-import io.druid.segment.writeout.OffHeapMemorySegmentWriteOutMedium;
-import io.druid.segment.writeout.WriteOutBytes;
-import io.druid.segment.writeout.SegmentWriteOutMedium;
-import it.unimi.dsi.fastutil.ints.IntArrayList;
 import org.apache.commons.io.IOUtils;
 import org.junit.After;
 import org.junit.Before;
@@ -31,6 +27,8 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
+import java.nio.channels.WritableByteChannel;
 import java.util.Random;
 
 import static org.junit.Assert.assertEquals;
@@ -39,7 +37,7 @@ public class VSizeIndexedIntsWriterTest
 {
   private static final int[] MAX_VALUES = new int[]{0xFF, 0xFFFF, 0xFFFFFF, 0x0FFFFFFF};
 
-  private final SegmentWriteOutMedium segmentWriteOutMedium = new OffHeapMemorySegmentWriteOutMedium();
+  private final IOPeon ioPeon = new TmpFileIOPeon();
   private final Random rand = new Random(0);
   private int[] vals;
 
@@ -52,7 +50,7 @@ public class VSizeIndexedIntsWriterTest
   @After
   public void tearDown() throws Exception
   {
-    segmentWriteOutMedium.close();
+    ioPeon.close();
   }
 
   private void generateVals(final int totalSize, final int maxValue) throws IOException
@@ -66,24 +64,28 @@ public class VSizeIndexedIntsWriterTest
   private void checkSerializedSizeAndData() throws Exception
   {
     int maxValue = vals.length == 0 ? 0 : Ints.max(vals);
-    VSizeIndexedIntsWriter writer = new VSizeIndexedIntsWriter(segmentWriteOutMedium, maxValue);
+    VSizeIndexedIntsWriter writer = new VSizeIndexedIntsWriter(
+        ioPeon, "test", maxValue
+    );
 
     VSizeIndexedInts intsFromList = VSizeIndexedInts.fromList(
-        IntArrayList.wrap(vals), maxValue
+        Ints.asList(vals), maxValue
     );
     writer.open();
     for (int val : vals) {
       writer.add(val);
     }
+    writer.close();
     long writtenLength = writer.getSerializedSize();
-    WriteOutBytes writeOutBytes = segmentWriteOutMedium.makeWriteOutBytes();
-    writer.writeTo(writeOutBytes, null);
+    final WritableByteChannel outputChannel = Channels.newChannel(ioPeon.makeOutputStream("output"));
+    writer.writeToChannel(outputChannel, null);
+    outputChannel.close();
 
     assertEquals(writtenLength, intsFromList.getSerializedSize());
 
     // read from ByteBuffer and check values
     VSizeIndexedInts intsFromByteBuffer = VSizeIndexedInts.readFromByteBuffer(
-        ByteBuffer.wrap(IOUtils.toByteArray(writeOutBytes.asInputStream()))
+        ByteBuffer.wrap(IOUtils.toByteArray(ioPeon.makeInputStream("output")))
     );
     assertEquals(vals.length, intsFromByteBuffer.size());
     for (int i = 0; i < vals.length; ++i) {

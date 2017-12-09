@@ -130,7 +130,7 @@ public class YeOldePlumberSchool implements PlumberSchool
           return -1;
         }
 
-        final int numRows = sink.add(row, false);
+        final int numRows = sink.add(row);
 
         if (!sink.canAppendRow()) {
           persist(committerSupplier.get());
@@ -182,14 +182,7 @@ public class YeOldePlumberSchool implements PlumberSchool
             }
 
             fileToUpload = new File(tmpSegmentDir, "merged");
-            indexMergerV9.mergeQueryableIndex(
-                indexes,
-                schema.getGranularitySpec().isRollup(),
-                schema.getAggregators(),
-                fileToUpload,
-                config.getIndexSpec(),
-                config.getSegmentWriteOutMediumFactory()
-            );
+            indexMergerV9.mergeQueryableIndex(indexes, schema.getGranularitySpec().isRollup(), schema.getAggregators(), fileToUpload, config.getIndexSpec());
           }
 
           // Map merged segment so we can extract dimensions
@@ -237,8 +230,7 @@ public class YeOldePlumberSchool implements PlumberSchool
             indexMergerV9.persist(
                 indexToPersist.getIndex(),
                 dirToPersist,
-                config.getIndexSpec(),
-                config.getSegmentWriteOutMediumFactory()
+                config.getIndexSpec()
             );
 
             indexToPersist.swapSegment(null);

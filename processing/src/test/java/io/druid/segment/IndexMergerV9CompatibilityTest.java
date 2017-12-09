@@ -27,13 +27,10 @@ import io.druid.data.input.InputRow;
 import io.druid.data.input.MapBasedInputRow;
 import io.druid.java.util.common.DateTimes;
 import io.druid.java.util.common.JodaUtils;
-import io.druid.segment.writeout.OffHeapMemorySegmentWriteOutMediumFactory;
-import io.druid.segment.writeout.SegmentWriteOutMediumFactory;
-import io.druid.segment.writeout.TmpFileSegmentWriteOutMediumFactory;
 import io.druid.query.aggregation.AggregatorFactory;
 import io.druid.query.aggregation.CountAggregatorFactory;
+import io.druid.segment.data.CompressedObjectStrategy;
 import io.druid.segment.data.CompressionFactory;
-import io.druid.segment.data.CompressionStrategy;
 import io.druid.segment.data.ConciseBitmapSerdeFactory;
 import io.druid.segment.incremental.IncrementalIndex;
 import io.druid.segment.incremental.IncrementalIndexSchema;
@@ -43,8 +40,6 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
 
 import java.io.File;
 import java.io.IOException;
@@ -57,18 +52,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-@RunWith(Parameterized.class)
 public class IndexMergerV9CompatibilityTest
 {
-  @Parameterized.Parameters
-  public static Collection<?> constructorFeeder() throws IOException
-  {
-    return ImmutableList.of(
-        new Object[] {TmpFileSegmentWriteOutMediumFactory.instance()},
-        new Object[] {OffHeapMemorySegmentWriteOutMediumFactory.instance()}
-    );
-  }
-
+  @Rule
+  public final CloserRule closer = new CloserRule(false);
   private static final long TIMESTAMP = DateTimes.of("2014-01-01").getMillis();
   private static final AggregatorFactory[] DEFAULT_AGG_FACTORIES = new AggregatorFactory[]{
       new CountAggregatorFactory(
@@ -76,24 +63,21 @@ public class IndexMergerV9CompatibilityTest
       )
   };
 
+  private static final IndexMergerV9 INDEX_MERGER_V9 = TestHelper.getTestIndexMergerV9();
+  private static final IndexIO INDEX_IO = TestHelper.getTestIndexIO();
+
   private static final IndexSpec INDEX_SPEC = IndexMergerTestBase.makeIndexSpec(
       new ConciseBitmapSerdeFactory(),
-      CompressionStrategy.LZ4,
-      CompressionStrategy.LZ4,
+      CompressedObjectStrategy.CompressionStrategy.LZ4,
+      CompressedObjectStrategy.CompressionStrategy.LZ4,
       CompressionFactory.LongEncodingStrategy.LONGS
   );
   private static final List<String> DIMS = ImmutableList.of("dim0", "dim1");
 
   private final Collection<InputRow> events;
-  @Rule
-  public final CloserRule closer = new CloserRule(false);
-  private final IndexMerger indexMerger;
-  private final IndexIO indexIO;
 
-  public IndexMergerV9CompatibilityTest(SegmentWriteOutMediumFactory segmentWriteOutMediumFactory)
+  public IndexMergerV9CompatibilityTest()
   {
-    indexMerger = TestHelper.getTestIndexMergerV9(segmentWriteOutMediumFactory);
-    indexIO = TestHelper.getTestIndexIO(segmentWriteOutMediumFactory);
     events = new ArrayList<>();
 
     final Map<String, Object> map1 = ImmutableMap.<String, Object>of(
@@ -177,7 +161,7 @@ public class IndexMergerV9CompatibilityTest
     QueryableIndex index = null;
     try {
       outDir = Files.createTempDir();
-      index = indexIO.loadIndex(indexMerger.persist(toPersist, outDir, INDEX_SPEC, null));
+      index = INDEX_IO.loadIndex(INDEX_MERGER_V9.persist(toPersist, outDir, INDEX_SPEC));
 
       Assert.assertEquals("value", index.getMetadata().get("key"));
     }
@@ -197,7 +181,7 @@ public class IndexMergerV9CompatibilityTest
   {
     final IndexableAdapter adapter = new QueryableIndexIndexableAdapter(
         closer.closeLater(
-            indexIO.loadIndex(
+            INDEX_IO.loadIndex(
                 persistTmpDir
             )
         )
@@ -208,12 +192,12 @@ public class IndexMergerV9CompatibilityTest
 
   private File reprocessAndValidate(File inDir, File tmpDir) throws IOException
   {
-    final File outDir = indexMerger.convert(
+    final File outDir = INDEX_MERGER_V9.convert(
         inDir,
         tmpDir,
         INDEX_SPEC
     );
-    indexIO.validateTwoSegments(persistTmpDir, outDir);
+    INDEX_IO.validateTwoSegments(persistTmpDir, outDir);
     return outDir;
   }
 
@@ -222,7 +206,7 @@ public class IndexMergerV9CompatibilityTest
   {
     final IndexableAdapter adapter = new QueryableIndexIndexableAdapter(
         closer.closeLater(
-            indexIO.loadIndex(
+            INDEX_IO.loadIndex(
                 persistTmpDir
             )
         )
@@ -232,12 +216,12 @@ public class IndexMergerV9CompatibilityTest
     reprocessAndValidate(persistTmpDir, tmpDir1);
 
     final File tmpDir2 = new File(tmpDir, "reprocessed2");
-    final IndexableAdapter adapter2 = new QueryableIndexIndexableAdapter(closer.closeLater(indexIO.loadIndex(tmpDir1)));
+    final IndexableAdapter adapter2 = new QueryableIndexIndexableAdapter(closer.closeLater(INDEX_IO.loadIndex(tmpDir1)));
     Assert.assertEquals(events.size(), adapter2.getNumRows());
     reprocessAndValidate(tmpDir1, tmpDir2);
 
     final File tmpDir3 = new File(tmpDir, "reprocessed3");
-    final IndexableAdapter adapter3 = new QueryableIndexIndexableAdapter(closer.closeLater(indexIO.loadIndex(tmpDir2)));
+    final IndexableAdapter adapter3 = new QueryableIndexIndexableAdapter(closer.closeLater(INDEX_IO.loadIndex(tmpDir2)));
     Assert.assertEquals(events.size(), adapter3.getNumRows());
     reprocessAndValidate(tmpDir2, tmpDir3);
   }

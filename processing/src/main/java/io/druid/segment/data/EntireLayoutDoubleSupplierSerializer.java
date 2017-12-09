@@ -19,42 +19,45 @@
 
 package io.druid.segment.data;
 
+import com.google.common.io.ByteStreams;
+import com.google.common.io.CountingOutputStream;
+import com.google.common.primitives.Doubles;
+import com.google.common.primitives.Ints;
 import io.druid.java.util.common.io.smoosh.FileSmoosher;
-import io.druid.segment.serde.MetaSerdeHelper;
-import io.druid.segment.writeout.SegmentWriteOutMedium;
-import io.druid.segment.writeout.WriteOutBytes;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.channels.Channels;
 import java.nio.channels.WritableByteChannel;
 
 
 public class EntireLayoutDoubleSupplierSerializer implements DoubleSupplierSerializer
 {
-  private static final MetaSerdeHelper<EntireLayoutDoubleSupplierSerializer> metaSerdeHelper = MetaSerdeHelper
-      .firstWriteByte((EntireLayoutDoubleSupplierSerializer x) -> CompressedDoublesIndexedSupplier.VERSION)
-      .writeInt(x -> x.numInserted)
-      .writeInt(x -> 0)
-      .writeByte(x -> CompressionStrategy.NONE.getId());
+  private final IOPeon ioPeon;
+  private final String valueFile;
+  private final String metaFile;
+  private CountingOutputStream valuesOut;
+  private long metaCount = 0;
 
-  private final SegmentWriteOutMedium segmentWriteOutMedium;
   private final ByteBuffer orderBuffer;
-  private WriteOutBytes valuesOut;
 
   private int numInserted = 0;
 
-  public EntireLayoutDoubleSupplierSerializer(SegmentWriteOutMedium segmentWriteOutMedium, ByteOrder order)
+  public EntireLayoutDoubleSupplierSerializer(IOPeon ioPeon, String filenameBase, ByteOrder order)
   {
-    this.segmentWriteOutMedium = segmentWriteOutMedium;
-    this.orderBuffer = ByteBuffer.allocate(Double.BYTES);
+    this.ioPeon = ioPeon;
+    this.valueFile = filenameBase + ".value";
+    this.metaFile = filenameBase + ".format";
+    this.orderBuffer = ByteBuffer.allocate(Doubles.BYTES);
     orderBuffer.order(order);
   }
 
   @Override
   public void open() throws IOException
   {
-    valuesOut = segmentWriteOutMedium.makeWriteOutBytes();
+    valuesOut = new CountingOutputStream(ioPeon.makeOutputStream(valueFile));
   }
 
   @Override
@@ -64,18 +67,38 @@ public class EntireLayoutDoubleSupplierSerializer implements DoubleSupplierSeria
     orderBuffer.putDouble(value);
     valuesOut.write(orderBuffer.array());
     ++numInserted;
+
   }
 
   @Override
-  public long getSerializedSize() throws IOException
+  public long getSerializedSize()
   {
-    return metaSerdeHelper.size(this) + valuesOut.size();
+    return metaCount + valuesOut.getCount();
   }
 
   @Override
-  public void writeTo(WritableByteChannel channel, FileSmoosher smoosher) throws IOException
+  public void writeToChannel(
+      WritableByteChannel channel, FileSmoosher smoosher
+  ) throws IOException
   {
-    metaSerdeHelper.writeTo(channel, this);
-    valuesOut.writeTo(channel);
+    try (InputStream meta = ioPeon.makeInputStream(metaFile);
+         InputStream value = ioPeon.makeInputStream(valueFile)) {
+      ByteStreams.copy(Channels.newChannel(meta), channel);
+      ByteStreams.copy(Channels.newChannel(value), channel);
+    }
+  }
+
+  @Override
+  public void close() throws IOException
+  {
+    valuesOut.close();
+    try (CountingOutputStream metaOut = new CountingOutputStream(ioPeon.makeOutputStream(metaFile))) {
+      metaOut.write(CompressedDoublesIndexedSupplier.version);
+      metaOut.write(Ints.toByteArray(numInserted));
+      metaOut.write(Ints.toByteArray(0));
+      metaOut.write(CompressedObjectStrategy.CompressionStrategy.NONE.getId());
+      metaOut.close();
+      metaCount = metaOut.getCount();
+    }
   }
 }

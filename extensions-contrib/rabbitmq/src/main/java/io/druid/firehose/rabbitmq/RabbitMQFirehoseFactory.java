@@ -21,7 +21,6 @@ package io.druid.firehose.rabbitmq;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.google.common.collect.Iterators;
 import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
@@ -46,7 +45,6 @@ import javax.annotation.Nullable;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.Iterator;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 
@@ -119,9 +117,7 @@ public class RabbitMQFirehoseFactory implements FirehoseFactory<InputRowParser<B
   ) throws Exception
   {
     this.connectionFactory = connectionFactory == null
-                             ? connectionFactoryCOMPAT == null
-                               ? JacksonifiedConnectionFactory.makeDefaultConnectionFactory()
-                               : connectionFactoryCOMPAT
+                             ? connectionFactoryCOMPAT == null ? JacksonifiedConnectionFactory.makeDefaultConnectionFactory() : connectionFactoryCOMPAT
                              : connectionFactory;
     this.config = config == null ? RabbitMQFirehoseConfig.makeDefaultConfig() : config;
 
@@ -194,10 +190,10 @@ public class RabbitMQFirehoseFactory implements FirehoseFactory<InputRowParser<B
     return new Firehose()
     {
       /**
-       * Storing the latest row as a member variable should be safe since this will only be run
+       * Storing the latest delivery as a member variable should be safe since this will only be run
        * by a single thread.
        */
-      private InputRow nextRow;
+      private Delivery delivery;
 
       /**
        * Store the latest delivery tag to be able to commit (acknowledge) the message delivery up to
@@ -205,27 +201,17 @@ public class RabbitMQFirehoseFactory implements FirehoseFactory<InputRowParser<B
        */
       private long lastDeliveryTag;
 
-      private Iterator<InputRow> nextIterator = Iterators.emptyIterator();
-
       @Override
       public boolean hasMore()
       {
-        nextRow = null;
+        delivery = null;
         try {
-          if (nextIterator.hasNext()) {
-            nextRow = nextIterator.next();
-            return true;
-          }
           // Wait for the next delivery. This will block until something is available.
-          final Delivery delivery = consumer.nextDelivery();
+          delivery = consumer.nextDelivery();
           if (delivery != null) {
             lastDeliveryTag = delivery.getEnvelope().getDeliveryTag();
-            nextIterator = firehoseParser.parseBatch(ByteBuffer.wrap(delivery.getBody())).iterator();
-            if (nextIterator.hasNext()) {
-              nextRow = nextIterator.next();
-              // If delivery is non-null, we report that there is something more to process.
-              return true;
-            }
+            // If delivery is non-null, we report that there is something more to process.
+            return true;
           }
         }
         catch (InterruptedException e) {
@@ -244,13 +230,13 @@ public class RabbitMQFirehoseFactory implements FirehoseFactory<InputRowParser<B
       @Override
       public InputRow nextRow()
       {
-        if (nextRow == null) {
+        if (delivery == null) {
           //Just making sure.
           log.wtf("I have nothing in delivery. Method hasMore() should have returned false.");
           return null;
         }
 
-        return nextRow;
+        return firehoseParser.parse(ByteBuffer.wrap(delivery.getBody()));
       }
 
       @Override

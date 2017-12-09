@@ -33,7 +33,6 @@ import com.alibaba.rocketmq.common.protocol.heartbeat.MessageModel;
 import com.alibaba.rocketmq.remoting.exception.RemotingException;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.google.common.collect.Iterators;
 import com.google.common.collect.Sets;
 import io.druid.data.input.Firehose;
 import io.druid.data.input.FirehoseFactory;
@@ -199,14 +198,10 @@ public class RocketMQFirehoseFactory implements FirehoseFactory<InputRowParser<B
 
     return new Firehose()
     {
-      private Iterator<InputRow> nextIterator = Iterators.emptyIterator();
 
       @Override
       public boolean hasMore()
       {
-        if (nextIterator.hasNext()) {
-          return true;
-        }
         boolean hasMore = false;
         DruidPullRequest earliestPullRequest = null;
 
@@ -257,19 +252,15 @@ public class RocketMQFirehoseFactory implements FirehoseFactory<InputRowParser<B
       @Override
       public InputRow nextRow()
       {
-        if (nextIterator.hasNext()) {
-          return nextIterator.next();
-        }
-
         for (Map.Entry<MessageQueue, ConcurrentSkipListSet<MessageExt>> entry : messageQueueTreeSetMap.entrySet()) {
           if (!entry.getValue().isEmpty()) {
             MessageExt message = entry.getValue().pollFirst();
-            nextIterator = theParser.parseBatch(ByteBuffer.wrap(message.getBody())).iterator();
+            InputRow inputRow = theParser.parse(ByteBuffer.wrap(message.getBody()));
 
             windows
                 .computeIfAbsent(entry.getKey(), k -> new ConcurrentSkipListSet<>())
                 .add(message.getQueueOffset());
-            return nextIterator.next();
+            return inputRow;
           }
         }
 

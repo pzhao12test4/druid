@@ -44,7 +44,6 @@ import io.druid.java.util.common.StringUtils;
 import io.druid.java.util.common.io.smoosh.Smoosh;
 import io.druid.java.util.common.io.smoosh.SmooshedFileMapper;
 import io.druid.java.util.common.logger.Logger;
-import io.druid.segment.writeout.SegmentWriteOutMediumFactory;
 import io.druid.segment.column.Column;
 import io.druid.segment.column.ColumnBuilder;
 import io.druid.segment.column.ColumnCapabilities;
@@ -71,7 +70,6 @@ import io.druid.segment.serde.LongGenericColumnSupplier;
 import io.druid.segment.serde.SpatialIndexColumnPartSupplier;
 import org.joda.time.Interval;
 
-import javax.annotation.Nullable;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -97,13 +95,11 @@ public class IndexIO
   private static final SerializerUtils serializerUtils = new SerializerUtils();
 
   private final ObjectMapper mapper;
-  private final SegmentWriteOutMediumFactory defaultSegmentWriteOutMediumFactory;
 
   @Inject
-  public IndexIO(ObjectMapper mapper, SegmentWriteOutMediumFactory defaultSegmentWriteOutMediumFactory, ColumnConfig columnConfig)
+  public IndexIO(ObjectMapper mapper, ColumnConfig columnConfig)
   {
     this.mapper = Preconditions.checkNotNull(mapper, "null ObjectMapper");
-    this.defaultSegmentWriteOutMediumFactory = Preconditions.checkNotNull(defaultSegmentWriteOutMediumFactory, "null SegmentWriteOutMediumFactory");
     Preconditions.checkNotNull(columnConfig, "null ColumnConfig");
     ImmutableMap.Builder<Integer, IndexLoader> indexLoadersBuilder = ImmutableMap.builder();
     LegacyIndexLoader legacyIndexLoader = new LegacyIndexLoader(new DefaultIndexIOHandler(), columnConfig);
@@ -228,17 +224,13 @@ public class IndexIO
       File converted,
       IndexSpec indexSpec,
       boolean forceIfCurrent,
-      boolean validate,
-      @Nullable SegmentWriteOutMediumFactory segmentWriteOutMediumFactory
+      boolean validate
   ) throws IOException
   {
     final int version = SegmentUtils.getVersionFromDir(toConvert);
     boolean current = version == CURRENT_VERSION_ID;
     if (!current || forceIfCurrent) {
-      if (segmentWriteOutMediumFactory == null) {
-        segmentWriteOutMediumFactory = this.defaultSegmentWriteOutMediumFactory;
-      }
-      new IndexMergerV9(mapper, this, segmentWriteOutMediumFactory).convert(toConvert, converted, indexSpec);
+      new IndexMergerV9(mapper, this).convert(toConvert, converted, indexSpec);
       if (validate) {
         validateTwoSegments(toConvert, converted);
       }
@@ -349,7 +341,8 @@ public class IndexIO
 
       CompressedLongsIndexedSupplier timestamps = CompressedLongsIndexedSupplier.fromByteBuffer(
           smooshedFiles.mapFile(makeTimeFile(inDir, BYTE_ORDER).getName()),
-          BYTE_ORDER
+          BYTE_ORDER,
+          smooshedFiles
       );
 
       Map<String, MetricHolder> metrics = Maps.newLinkedHashMap();

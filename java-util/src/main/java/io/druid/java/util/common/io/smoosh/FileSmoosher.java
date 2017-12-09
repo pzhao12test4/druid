@@ -46,9 +46,7 @@ import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
-import java.nio.channels.FileChannel;
 import java.nio.channels.GatheringByteChannel;
-import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -293,20 +291,21 @@ public class FileSmoosher implements Closeable
 
     return new SmooshedWriter()
     {
-      private final GatheringByteChannel channel =
-          FileChannel.open(
-              tmpFile.toPath(),
-              StandardOpenOption.WRITE,
-              StandardOpenOption.CREATE,
-              StandardOpenOption.TRUNCATE_EXISTING
-          );
+      private final FileOutputStream out = new FileOutputStream(tmpFile);
+      private final GatheringByteChannel channel = out.getChannel();
+      private final Closer closer = Closer.create();
 
       private int currOffset = 0;
+
+      {
+        closer.register(out);
+        closer.register(channel);
+      }
 
       @Override
       public void close() throws IOException
       {
-        channel.close();
+        closer.close();
         completedFiles.add(tmpFile);
         filesInProcess.remove(tmpFile);
 

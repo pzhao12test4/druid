@@ -35,7 +35,6 @@ import io.druid.java.util.common.guava.Sequence;
 import io.druid.java.util.common.guava.Sequences;
 import io.druid.java.util.common.logger.Logger;
 import io.druid.js.JavaScriptConfig;
-import io.druid.segment.writeout.OffHeapMemorySegmentWriteOutMediumFactory;
 import io.druid.query.Druids;
 import io.druid.query.FinalizeResultsQueryRunner;
 import io.druid.query.Query;
@@ -129,7 +128,6 @@ public class FilteredAggregatorBenchmark
     JSON_MAPPER = new DefaultObjectMapper();
     INDEX_IO = new IndexIO(
         JSON_MAPPER,
-        OffHeapMemorySegmentWriteOutMediumFactory.instance(),
         new ColumnConfig()
         {
           @Override
@@ -139,7 +137,7 @@ public class FilteredAggregatorBenchmark
           }
         }
     );
-    INDEX_MERGER_V9 = new IndexMergerV9(JSON_MAPPER, INDEX_IO, OffHeapMemorySegmentWriteOutMediumFactory.instance());
+    INDEX_MERGER_V9 = new IndexMergerV9(JSON_MAPPER, INDEX_IO);
   }
 
   @Setup
@@ -196,8 +194,7 @@ public class FilteredAggregatorBenchmark
     indexFile = INDEX_MERGER_V9.persist(
         incIndex,
         tmpDir,
-        new IndexSpec(),
-        null
+        new IndexSpec()
     );
     qIndex = INDEX_IO.loadIndex(indexFile);
 

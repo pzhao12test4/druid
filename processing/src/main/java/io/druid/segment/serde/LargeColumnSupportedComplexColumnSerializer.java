@@ -22,9 +22,9 @@ package io.druid.segment.serde;
 import io.druid.guice.annotations.PublicApi;
 import io.druid.java.util.common.StringUtils;
 import io.druid.java.util.common.io.smoosh.FileSmoosher;
-import io.druid.segment.writeout.SegmentWriteOutMedium;
 import io.druid.segment.GenericColumnSerializer;
 import io.druid.segment.data.GenericIndexedWriter;
+import io.druid.segment.data.IOPeon;
 import io.druid.segment.data.ObjectStrategy;
 
 import java.io.IOException;
@@ -32,52 +32,51 @@ import java.nio.channels.WritableByteChannel;
 
 public class LargeColumnSupportedComplexColumnSerializer implements GenericColumnSerializer
 {
-  @PublicApi
-  public static LargeColumnSupportedComplexColumnSerializer create(
-      SegmentWriteOutMedium segmentWriteOutMedium,
-      String filenameBase,
-      ObjectStrategy strategy
-  )
-  {
-    return new LargeColumnSupportedComplexColumnSerializer(segmentWriteOutMedium, filenameBase, strategy);
-  }
 
-  public static LargeColumnSupportedComplexColumnSerializer createWithColumnSize(
-      SegmentWriteOutMedium segmentWriteOutMedium,
-      String filenameBase,
-      ObjectStrategy strategy,
-      int columnSize
-  )
-  {
-    return new LargeColumnSupportedComplexColumnSerializer(segmentWriteOutMedium, filenameBase, strategy, columnSize);
-  }
-
-  private final SegmentWriteOutMedium segmentWriteOutMedium;
+  private final IOPeon ioPeon;
   private final String filenameBase;
   private final ObjectStrategy strategy;
   private final int columnSize;
   private GenericIndexedWriter writer;
-
-  private LargeColumnSupportedComplexColumnSerializer(
-      SegmentWriteOutMedium segmentWriteOutMedium,
+  public LargeColumnSupportedComplexColumnSerializer(
+      IOPeon ioPeon,
       String filenameBase,
       ObjectStrategy strategy
   )
   {
-    this(segmentWriteOutMedium, filenameBase, strategy, Integer.MAX_VALUE);
+    this(ioPeon, filenameBase, strategy, Integer.MAX_VALUE);
   }
-
-  private LargeColumnSupportedComplexColumnSerializer(
-      SegmentWriteOutMedium segmentWriteOutMedium,
+  public LargeColumnSupportedComplexColumnSerializer(
+      IOPeon ioPeon,
       String filenameBase,
       ObjectStrategy strategy,
       int columnSize
   )
   {
-    this.segmentWriteOutMedium = segmentWriteOutMedium;
+    this.ioPeon = ioPeon;
     this.filenameBase = filenameBase;
     this.strategy = strategy;
     this.columnSize = columnSize;
+  }
+
+  @PublicApi
+  public static LargeColumnSupportedComplexColumnSerializer create(
+      IOPeon ioPeon,
+      String filenameBase,
+      ObjectStrategy strategy
+  )
+  {
+    return new LargeColumnSupportedComplexColumnSerializer(ioPeon, filenameBase, strategy);
+  }
+
+  public static LargeColumnSupportedComplexColumnSerializer createWithColumnSize(
+      IOPeon ioPeon,
+      String filenameBase,
+      ObjectStrategy strategy,
+      int columnSize
+  )
+  {
+    return new LargeColumnSupportedComplexColumnSerializer(ioPeon, filenameBase, strategy, columnSize);
   }
 
   @SuppressWarnings(value = "unchecked")
@@ -85,11 +84,7 @@ public class LargeColumnSupportedComplexColumnSerializer implements GenericColum
   public void open() throws IOException
   {
     writer = new GenericIndexedWriter(
-        segmentWriteOutMedium,
-        StringUtils.format("%s.complex_column", filenameBase),
-        strategy,
-        columnSize
-    );
+        ioPeon, StringUtils.format("%s.complex_column", filenameBase), strategy, columnSize);
     writer.open();
   }
 
@@ -101,15 +96,21 @@ public class LargeColumnSupportedComplexColumnSerializer implements GenericColum
   }
 
   @Override
-  public long getSerializedSize() throws IOException
+  public void close() throws IOException
+  {
+    writer.close();
+  }
+
+  @Override
+  public long getSerializedSize()
   {
     return writer.getSerializedSize();
   }
 
   @Override
-  public void writeTo(WritableByteChannel channel, FileSmoosher smoosher) throws IOException
+  public void writeToChannel(WritableByteChannel channel, FileSmoosher smoosher) throws IOException
   {
-    writer.writeTo(channel, smoosher);
+    writer.writeToChannel(channel, smoosher);
   }
 
 }

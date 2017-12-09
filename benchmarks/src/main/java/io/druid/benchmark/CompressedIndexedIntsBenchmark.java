@@ -19,13 +19,12 @@
 
 package io.druid.benchmark;
 
-import io.druid.java.util.common.io.Closer;
+import com.google.common.primitives.Ints;
+import io.druid.segment.data.CompressedObjectStrategy;
 import io.druid.segment.data.CompressedVSizeIntsIndexedSupplier;
-import io.druid.segment.data.CompressionStrategy;
 import io.druid.segment.data.IndexedInts;
 import io.druid.segment.data.VSizeIndexedInts;
 import io.druid.segment.data.WritableSupplier;
-import it.unimi.dsi.fastutil.ints.IntArrayList;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Mode;
@@ -70,20 +69,25 @@ public class CompressedIndexedIntsBenchmark
     }
     final ByteBuffer bufferCompressed = serialize(
         CompressedVSizeIntsIndexedSupplier.fromList(
-            IntArrayList.wrap(vals),
+            Ints.asList(vals),
             bound - 1,
             CompressedVSizeIntsIndexedSupplier.maxIntsInBufferForBytes(bytes),
-            ByteOrder.nativeOrder(),
-            CompressionStrategy.LZ4,
-            Closer.create()
+            ByteOrder.nativeOrder(), CompressedObjectStrategy.CompressionStrategy.LZ4
         )
     );
     this.compressed = CompressedVSizeIntsIndexedSupplier.fromByteBuffer(
         bufferCompressed,
-        ByteOrder.nativeOrder()
+        ByteOrder.nativeOrder(),
+        null
     ).get();
 
-    final ByteBuffer bufferUncompressed = serialize(VSizeIndexedInts.fromArray(vals));
+    final ByteBuffer bufferUncompressed = serialize(
+        new VSizeIndexedInts.VSizeIndexedIntsSupplier(
+            VSizeIndexedInts.fromArray(
+                vals
+            )
+        )
+    );
     this.uncompressed = VSizeIndexedInts.readFromByteBuffer(bufferUncompressed);
 
     filter = new BitSet();
@@ -124,7 +128,7 @@ public class CompressedIndexedIntsBenchmark
       }
     };
 
-    writableSupplier.writeTo(channel, null);
+    writableSupplier.writeToChannel(channel);
     buffer.rewind();
     return buffer;
   }

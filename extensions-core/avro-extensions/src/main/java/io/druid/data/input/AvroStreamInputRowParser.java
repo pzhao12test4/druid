@@ -28,7 +28,6 @@ import io.druid.java.util.common.parsers.ObjectFlattener;
 import org.apache.avro.generic.GenericRecord;
 
 import java.nio.ByteBuffer;
-import java.util.List;
 import java.util.Objects;
 
 public class AvroStreamInputRowParser implements ByteBufferInputRowParser
@@ -49,7 +48,7 @@ public class AvroStreamInputRowParser implements ByteBufferInputRowParser
   }
 
   @Override
-  public List<InputRow> parseBatch(ByteBuffer input)
+  public InputRow parse(ByteBuffer input)
   {
     return AvroParsers.parseGenericRecord(avroBytesDecoder.parse(input), parseSpec, avroFlattener);
   }

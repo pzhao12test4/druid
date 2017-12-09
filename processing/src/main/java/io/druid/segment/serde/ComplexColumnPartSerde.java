@@ -21,11 +21,14 @@ package io.druid.segment.serde;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.druid.java.util.common.io.smoosh.FileSmoosher;
 import io.druid.segment.GenericColumnSerializer;
 import io.druid.segment.column.ColumnBuilder;
 import io.druid.segment.column.ColumnConfig;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.WritableByteChannel;
 
 /**
  */
@@ -100,7 +103,23 @@ public class ComplexColumnPartSerde implements ColumnPartSerde
 
     public ComplexColumnPartSerde build()
     {
-      return new ComplexColumnPartSerde(typeName, delegate);
+      return new ComplexColumnPartSerde(
+          typeName,
+          new Serializer()
+          {
+            @Override
+            public long numBytes()
+            {
+              return delegate.getSerializedSize();
+            }
+
+            @Override
+            public void write(WritableByteChannel channel, FileSmoosher smoosher) throws IOException
+            {
+              delegate.writeToChannel(channel, smoosher);
+            }
+          }
+      );
     }
   }
 }

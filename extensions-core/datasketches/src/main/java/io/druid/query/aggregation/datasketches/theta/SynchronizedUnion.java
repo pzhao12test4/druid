@@ -21,14 +21,13 @@ package io.druid.query.aggregation.datasketches.theta;
 
 import com.yahoo.memory.Memory;
 import com.yahoo.memory.WritableMemory;
-import com.yahoo.sketches.Family;
 import com.yahoo.sketches.theta.CompactSketch;
 import com.yahoo.sketches.theta.Sketch;
 import com.yahoo.sketches.theta.Union;
 
 /**
  */
-public class SynchronizedUnion extends Union
+public class SynchronizedUnion implements Union
 {
   private final Union delegate;
 
@@ -68,21 +67,18 @@ public class SynchronizedUnion extends Union
   }
 
   @Override
-  @SuppressWarnings("ParameterPackage")
   public synchronized void update(byte[] data)
   {
     delegate.update(data);
   }
 
   @Override
-  @SuppressWarnings("ParameterPackage")
   public synchronized void update(int[] data)
   {
     delegate.update(data);
   }
 
   @Override
-  @SuppressWarnings("ParameterPackage")
   public synchronized void update(char[] chars)
   {
     delegate.update(chars);
@@ -123,11 +119,4 @@ public class SynchronizedUnion extends Union
   {
     return delegate.isSameResource(mem);
   }
-
-  @Override
-  public synchronized Family getFamily()
-  {
-    return delegate.getFamily();
-  }
-
 }

@@ -116,8 +116,7 @@ public class TestIndexerMetadataStorageCoordinator implements IndexerMetadataSto
       String sequenceName,
       String previousSegmentId,
       Interval interval,
-      String maxVersion,
-      boolean skipSegmentLineageCheck
+      String maxVersion
   ) throws IOException
   {
     throw new UnsupportedOperationException();

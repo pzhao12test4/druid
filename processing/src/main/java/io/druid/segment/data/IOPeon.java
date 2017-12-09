@@ -17,22 +17,19 @@
  * under the License.
  */
 
-package io.druid.sql.calcite.http;
+package io.druid.segment.data;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.collect.ImmutableMap;
-import io.druid.segment.TestHelper;
-import io.druid.sql.http.SqlQuery;
-import org.junit.Assert;
-import org.junit.Test;
+import java.io.Closeable;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 
-public class SqlQueryTest
+/**
+ */
+public interface IOPeon extends Closeable
 {
-  @Test
-  public void testSerde() throws Exception
-  {
-    final ObjectMapper jsonMapper = TestHelper.getJsonMapper();
-    final SqlQuery query = new SqlQuery("SELECT 1", SqlQuery.ResultFormat.ARRAY, ImmutableMap.of("useCache", false));
-    Assert.assertEquals(query, jsonMapper.readValue(jsonMapper.writeValueAsString(query), SqlQuery.class));
-  }
+  OutputStream makeOutputStream(String filename) throws IOException;
+  InputStream makeInputStream(String filename) throws IOException;
+  File getFile(String filename);
 }

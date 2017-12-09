@@ -19,13 +19,19 @@
 
 package io.druid.segment.data;
 
-import io.druid.segment.serde.Serializer;
+import com.google.common.io.ByteSink;
+import io.druid.java.util.common.io.smoosh.FileSmoosher;
 
+import java.io.Closeable;
 import java.io.IOException;
+import java.nio.channels.WritableByteChannel;
 
-public interface FloatSupplierSerializer extends Serializer
+public interface FloatSupplierSerializer extends Closeable
 {
   void open() throws IOException;
   int size();
   void add(float value) throws IOException;
+  void closeAndConsolidate(ByteSink consolidatedOut) throws IOException;
+  long getSerializedSize();
+  void writeToChannel(WritableByteChannel channel, FileSmoosher smoosher) throws IOException;
 }

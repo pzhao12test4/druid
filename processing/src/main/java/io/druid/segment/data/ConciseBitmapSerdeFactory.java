@@ -46,7 +46,8 @@ public class ConciseBitmapSerdeFactory implements BitmapSerdeFactory
     return bitmapFactory;
   }
 
-  private static class ImmutableConciseSetObjectStrategy implements ObjectStrategy<ImmutableBitmap>
+  private static class ImmutableConciseSetObjectStrategy
+      implements ObjectStrategy<ImmutableBitmap>
   {
     @Override
     public Class<ImmutableBitmap> getClazz()

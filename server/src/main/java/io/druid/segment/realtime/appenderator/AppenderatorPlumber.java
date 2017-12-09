@@ -155,7 +155,7 @@ public class AppenderatorPlumber implements Plumber
     final int numRows;
 
     try {
-      numRows = appenderator.add(identifier, row, committerSupplier).getNumRowsInSegment();
+      numRows = appenderator.add(identifier, row, committerSupplier);
       lastCommitterSupplier = committerSupplier;
       return numRows;
     }

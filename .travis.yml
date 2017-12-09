@@ -1,69 +1,73 @@
-language: java
-
-dist: trusty
-
-jdk:
-  - oraclejdk8
-
+before_cache:
+- rm -rf $HOME/CACHE; find $TRAVIS_BUILD_DIR -name .starts | while read line; do du
+  -sh $line;         DIR=$(dirname $HOME/CACHE$line); mkdir -p $DIR; cp -r $line $DIR;
+  done
+- find $TRAVIS_BUILD_DIR -name jdeps-cache | while read line; do du -sh $line;         DIR=$(dirname
+  $HOME/CACHE$line); mkdir -p $DIR; cp -r $line $DIR; done
+- echo CACHESIZE $(du -sk $HOME/CACHE)
+before_install:
+- find $HOME/CACHE -name jdeps-cache | while read line; do du -sh $line;         DIR=$(dirname
+  ${line#$HOME/CACHE}); if [[ -d ${DIR#jdeps-cache/} ]]; then cp -r $line $DIR; fi;
+  done
+- find $HOME/CACHE -name .starts | while read line; do du -sh $line;         DIR=$(dirname
+  ${line#$HOME/CACHE}); if [[ -d ${DIR#.starts/} ]]; then cp -r $line $DIR; fi; done
+before_script:
+- find $TRAVIS_BUILD_DIR -name .starts | while read line; do rm -rf $line; done
+- find $TRAVIS_BUILD_DIR -name jdeps-cache | while read line; do rm -rf $line; done
+- find $HOME/CACHE -name jdeps-cache | while read line; do du -sh $line;         DIR=$(dirname
+  ${line#$HOME/CACHE}); if [[ -d ${DIR#jdeps-cache/} ]]; then cp -r $line $DIR; fi;
+  done
+- find $HOME/CACHE -name .starts | while read line; do du -sh $line;         DIR=$(dirname
+  ${line#$HOME/CACHE}); if [[ -d ${DIR#.starts/} ]]; then cp -r $line $DIR; fi; done
 cache:
   directories:
-    - $HOME/.m2
-
+  - $HOME/.m2
+  - $HOME/CACHE
+dist: trusty
+jdk:
+- oraclejdk8
+language: java
 matrix:
   include:
-      # strict compilation
-    - sudo: false
-      env:
-        - NAME="strict compilation"
-      install: true
-      # Strict compilation requires more than 2 GB
-      script: echo "MAVEN_OPTS='-Xmx3000m'" > ~/.mavenrc && mvn clean -Pstrict -pl '!benchmarks' compile test-compile -B
-
-      # processing module test
-    - sudo: false
-      env:
-        - NAME="processing module test"
-      install: echo "MAVEN_OPTS='-Xmx3000m'" > ~/.mavenrc && mvn install -q -ff -DskipTests -B
-      before_script:
-        - unset _JAVA_OPTIONS
-      script: echo "MAVEN_OPTS='-Xmx512m'" > ~/.mavenrc && mvn test -B -Pparallel-test -Dmaven.fork.count=2 -pl processing
-
-      # server module test
-    - sudo: false
-      env:
-        - NAME="server module test"
-      install: echo "MAVEN_OPTS='-Xmx3000m'" > ~/.mavenrc && mvn install -q -ff -DskipTests -B
-      before_script:
-        - unset _JAVA_OPTIONS
-      # Server module test is run without the parallel-test option because it's memory sensitive and often fails with that option.
-      script: echo "MAVEN_OPTS='-Xmx512m'" > ~/.mavenrc && mvn test -B -pl server
-
-      # other modules test
-    - sudo: false
-      env:
-        - NAME="other modules test"
-      install: echo "MAVEN_OPTS='-Xmx3000m'" > ~/.mavenrc && mvn install -q -ff -DskipTests -B
-      before_script:
-        - unset _JAVA_OPTIONS
-      script: echo "MAVEN_OPTS='-Xmx512m'" > ~/.mavenrc && mvn test -B -Pparallel-test -Dmaven.fork.count=2 -pl '!processing,!server'
-
-      # run integration tests
-    - sudo: required
-      services:
-        - docker
-      env:
-        - NAME="integration test"
-        - DOCKER_IP=172.17.0.1
-      install:
-        # Only errors will be shown with the -q option. This is to avoid generating too many logs which make travis build failed.
-        - mvn install -q -ff -DskipTests -B
-      script:
-        - $TRAVIS_BUILD_DIR/ci/travis_script_integration.sh
-      after_failure:
-        - for v in ~/shared/logs/*.log ; do
-          echo $v logtail ======================== ; tail -100 $v ;
-          done
-        - for v in broker middlemanager overlord router coordinator historical ; do
-          echo $v dmesg ======================== ;
-          docker exec -it druid-$v sh -c 'dmesg | tail -3' ;
-          done
+  - install: true
+    script: echo "MAVEN_OPTS='-Xmx3000m'" > ~/.mavenrc && mvn clean -Pstrict -pl '!benchmarks'
+      compile test-compile -B
+    sudo: false
+  - before_script:
+    - unset _JAVA_OPTIONS
+    install: echo "MAVEN_OPTS='-Xmx3000m'" > ~/.mavenrc && mvn install -q -ff -DskipTests
+      -B
+    script: echo "MAVEN_OPTS='-Xmx512m'" > ~/.mavenrc && mvn test -B -Pparallel-test
+      -Dmaven.fork.count=2 -pl processing
+    sudo: false
+  - before_script:
+    - unset _JAVA_OPTIONS
+    install: echo "MAVEN_OPTS='-Xmx3000m'" > ~/.mavenrc && mvn install -q -ff -DskipTests
+      -B
+    script: echo "MAVEN_OPTS='-Xmx512m'" > ~/.mavenrc && mvn test -B -Pparallel-test
+      -Dmaven.fork.count=2 -pl '!processing'
+    sudo: false
+  - after_failure:
+    - for v in ~/shared/logs/*.log ; do echo $v logtail ======================== ;
+      tail -100 $v ; done
+    - for v in broker middlemanager overlord router coordinator historical ; do echo
+      $v dmesg ======================== ; docker exec -it druid-$v sh -c 'dmesg |
+      tail -3' ; done
+    env:
+    - DOCKER_IP=172.17.0.1
+    install:
+    - mvn install -q -ff -DskipTests -B
+    script:
+    - $TRAVIS_BUILD_DIR/ci/travis_script_integration.sh
+    services:
+    - docker
+    sudo: required
+script:
+- touch NOW
+- echo GIBSTUDYSTART $(date)
+- mvn test -B
+- echo GIBSTUDYEND $(date)
+- cd $TRAVIS_BUILD_DIR
+- if [ "$TRAVIS_OS_NAME" == "osx" ];        then echo TESTNUM $(find . -name TEST-*.xml
+  -newer NOW | wc -l);        else echo TESTNUM $(find -name TEST-*.xml -newer NOW
+  | wc -l);        fi

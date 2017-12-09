@@ -17,23 +17,41 @@
  * under the License.
  */
 
-package io.druid.io;
+package io.druid.segment.data;
 
-import java.io.IOException;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
-import java.nio.channels.WritableByteChannel;
+import java.nio.ByteOrder;
 
-public final class Channels
+public abstract class FixedSizeCompressedObjectStrategy<T extends Buffer> extends CompressedObjectStrategy<T>
 {
+  private final int sizePer;
 
-  public static void writeFully(WritableByteChannel channel, ByteBuffer src) throws IOException
+  protected FixedSizeCompressedObjectStrategy(
+      ByteOrder order,
+      BufferConverter<T> converter,
+      CompressionStrategy compression,
+      int sizePer
+  )
   {
-    while (src.remaining() > 0) {
-      channel.write(src);
-    }
+    super(order, converter, compression);
+    this.sizePer = sizePer;
   }
 
-  private Channels()
+  public int getSize()
   {
+    return sizePer;
+  }
+
+  @Override
+  protected ByteBuffer bufferFor(T val)
+  {
+    return ByteBuffer.allocate(converter.sizeOf(getSize())).order(order);
+  }
+
+  @Override
+  protected void decompress(ByteBuffer buffer, int numBytes, ByteBuffer buf)
+  {
+    decompressor.decompress(buffer, numBytes, buf, converter.sizeOf(getSize()));
   }
 }

@@ -91,7 +91,6 @@ public class SameIntervalMergeTaskTest
         true,
         indexSpec,
         true,
-        null,
         null
     );
 
