@@ -24,7 +24,7 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.google.common.base.Preconditions;
 import com.google.inject.name.Named;
 
-public class HybridCacheProvider extends HybridCacheConfig implements CacheProvider
+public class HybridCacheProvider implements CacheProvider
 {
   final CacheProvider level1;
   final CacheProvider level2;
@@ -37,17 +37,11 @@ public class HybridCacheProvider extends HybridCacheConfig implements CacheProvi
   {
     this.level1 = Preconditions.checkNotNull(level1, "l1 cache not specified for hybrid cache");
     this.level2 = Preconditions.checkNotNull(level2, "l2 cache not specified for hybrid cache");
-    if (!getUseL2() && !getPopulateL2()) {
-      throw new IllegalStateException(
-          "Doesn't make sense to use Hybrid cache with both use and populate disabled for L2, "
-          + "use just L1 cache in this case"
-      );
-    }
   }
 
   @Override
   public Cache get()
   {
-    return new HybridCache(this, level1.get(), level2.get());
+    return new HybridCache(level1.get(), level2.get());
   }
 }

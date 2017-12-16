@@ -127,28 +127,12 @@ public class SqlResourceTest
   public void testCountStar() throws Exception
   {
     final List<Map<String, Object>> rows = doPost(
-        new SqlQuery("SELECT COUNT(*) AS cnt, 'foo' AS TheFoo FROM druid.foo", null, null)
+        new SqlQuery("SELECT COUNT(*) AS cnt FROM druid.foo", null)
     ).rhs;
 
     Assert.assertEquals(
         ImmutableList.of(
-            ImmutableMap.of("cnt", 6, "TheFoo", "foo")
-        ),
-        rows
-    );
-  }
-
-  @Test
-  public void testCountStarAsArray() throws Exception
-  {
-    final List<List<Object>> rows = doPost(
-        new SqlQuery("SELECT COUNT(*), 'foo' FROM druid.foo", SqlQuery.ResultFormat.ARRAY, null),
-        new TypeReference<List<List<Object>>>() {}
-    ).rhs;
-
-    Assert.assertEquals(
-        ImmutableList.of(
-            ImmutableList.of(6, "foo")
+            ImmutableMap.of("cnt", 6)
         ),
         rows
     );
@@ -158,11 +142,7 @@ public class SqlResourceTest
   public void testTimestampsInResponse() throws Exception
   {
     final List<Map<String, Object>> rows = doPost(
-        new SqlQuery(
-            "SELECT __time, CAST(__time AS DATE) AS t2 FROM druid.foo LIMIT 1",
-            SqlQuery.ResultFormat.OBJECT,
-            null
-        )
+        new SqlQuery("SELECT __time, CAST(__time AS DATE) AS t2 FROM druid.foo LIMIT 1", null)
     ).rhs;
 
     Assert.assertEquals(
@@ -179,7 +159,6 @@ public class SqlResourceTest
     final List<Map<String, Object>> rows = doPost(
         new SqlQuery(
             "SELECT __time, CAST(__time AS DATE) AS t2 FROM druid.foo LIMIT 1",
-            SqlQuery.ResultFormat.OBJECT,
             ImmutableMap.<String, Object>of(PlannerContext.CTX_SQL_TIME_ZONE, "America/Los_Angeles")
         )
     ).rhs;
@@ -196,7 +175,7 @@ public class SqlResourceTest
   public void testFieldAliasingSelect() throws Exception
   {
     final List<Map<String, Object>> rows = doPost(
-        new SqlQuery("SELECT dim2 \"x\", dim2 \"y\" FROM druid.foo LIMIT 1", SqlQuery.ResultFormat.OBJECT, null)
+        new SqlQuery("SELECT dim2 \"x\", dim2 \"y\" FROM druid.foo LIMIT 1", null)
     ).rhs;
 
     Assert.assertEquals(
@@ -211,7 +190,7 @@ public class SqlResourceTest
   public void testFieldAliasingGroupBy() throws Exception
   {
     final List<Map<String, Object>> rows = doPost(
-        new SqlQuery("SELECT dim2 \"x\", dim2 \"y\" FROM druid.foo GROUP BY dim2", SqlQuery.ResultFormat.OBJECT, null)
+        new SqlQuery("SELECT dim2 \"x\", dim2 \"y\" FROM druid.foo GROUP BY dim2", null)
     ).rhs;
 
     Assert.assertEquals(
@@ -228,7 +207,7 @@ public class SqlResourceTest
   public void testExplainCountStar() throws Exception
   {
     final List<Map<String, Object>> rows = doPost(
-        new SqlQuery("EXPLAIN PLAN FOR SELECT COUNT(*) AS cnt FROM druid.foo", SqlQuery.ResultFormat.OBJECT, null)
+        new SqlQuery("EXPLAIN PLAN FOR SELECT COUNT(*) AS cnt FROM druid.foo", null)
     ).rhs;
 
     Assert.assertEquals(
@@ -245,13 +224,7 @@ public class SqlResourceTest
   @Test
   public void testCannotValidate() throws Exception
   {
-    final QueryInterruptedException exception = doPost(
-        new SqlQuery(
-            "SELECT dim3 FROM druid.foo",
-            SqlQuery.ResultFormat.OBJECT,
-            null
-        )
-    ).lhs;
+    final QueryInterruptedException exception = doPost(new SqlQuery("SELECT dim3 FROM druid.foo", null)).lhs;
 
     Assert.assertNotNull(exception);
     Assert.assertEquals(QueryInterruptedException.UNKNOWN_EXCEPTION, exception.getErrorCode());
@@ -264,7 +237,7 @@ public class SqlResourceTest
   {
     // SELECT + ORDER unsupported
     final QueryInterruptedException exception = doPost(
-        new SqlQuery("SELECT dim1 FROM druid.foo ORDER BY dim1", SqlQuery.ResultFormat.OBJECT, null)
+        new SqlQuery("SELECT dim1 FROM druid.foo ORDER BY dim1", null)
     ).lhs;
 
     Assert.assertNotNull(exception);
@@ -282,8 +255,9 @@ public class SqlResourceTest
     final QueryInterruptedException exception = doPost(
         new SqlQuery(
             "SELECT DISTINCT dim1 FROM foo",
-            SqlQuery.ResultFormat.OBJECT,
-            ImmutableMap.<String, Object>of("maxMergingDictionarySize", 1)
+            ImmutableMap.<String, Object>of(
+                "maxMergingDictionarySize", 1
+            )
         )
     ).lhs;
 
@@ -293,10 +267,7 @@ public class SqlResourceTest
   }
 
   // Returns either an error or a result.
-  private <T> Pair<QueryInterruptedException, T> doPost(
-      final SqlQuery query,
-      final TypeReference<T> typeReference
-  ) throws Exception
+  private Pair<QueryInterruptedException, List<Map<String, Object>>> doPost(final SqlQuery query) throws Exception
   {
     final Response response = resource.doPost(query, req);
     if (response.getStatus() == 200) {
@@ -305,7 +276,12 @@ public class SqlResourceTest
       output.write(baos);
       return Pair.of(
           null,
-          JSON_MAPPER.<T>readValue(baos.toByteArray(), typeReference)
+          JSON_MAPPER.<List<Map<String, Object>>>readValue(
+              baos.toByteArray(),
+              new TypeReference<List<Map<String, Object>>>()
+              {
+              }
+          )
       );
     } else {
       return Pair.of(
@@ -313,10 +289,5 @@ public class SqlResourceTest
           null
       );
     }
-  }
-
-  private Pair<QueryInterruptedException, List<Map<String, Object>>> doPost(final SqlQuery query) throws Exception
-  {
-    return doPost(query, new TypeReference<List<Map<String, Object>>>() {});
   }
 }
