@@ -114,7 +114,7 @@ public class SqlResource
 
                   while (!yielder.isDone()) {
                     final Object[] row = yielder.get();
-                    sqlQuery.getResultFormat().writeResultStart(jsonGenerator);
+                    jsonGenerator.writeStartObject();
                     for (int i = 0; i < fieldList.size(); i++) {
                       final Object value;
 
@@ -130,9 +130,9 @@ public class SqlResource
                         value = row[i];
                       }
 
-                      sqlQuery.getResultFormat().writeResultField(jsonGenerator, fieldList.get(i).getName(), value);
+                      jsonGenerator.writeObjectField(fieldList.get(i).getName(), value);
                     }
-                    sqlQuery.getResultFormat().writeResultEnd(jsonGenerator);
+                    jsonGenerator.writeEndObject();
                     yielder = yielder.next(null);
                   }
 

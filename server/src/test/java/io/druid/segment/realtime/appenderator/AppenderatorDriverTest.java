@@ -122,7 +122,7 @@ public class AppenderatorDriverTest
     driver.close();
   }
 
-  @Test(timeout = 2000L)
+  @Test
   public void testSimple() throws Exception
   {
     final TestCommitterSupplier<Integer> committerSupplier = new TestCommitterSupplier<>();
@@ -139,11 +139,8 @@ public class AppenderatorDriverTest
         committerSupplier.get(),
         ImmutableList.of("dummy")
     ).get(PUBLISH_TIMEOUT, TimeUnit.MILLISECONDS);
-
-    while (driver.getSegments().containsKey("dummy")) {
-      Thread.sleep(100);
-    }
-
+    Assert.assertFalse(driver.getActiveSegments().containsKey("dummy"));
+    Assert.assertFalse(driver.getPublishPendingSegments().containsKey("dummy"));
     final SegmentsAndMetadata segmentsAndMetadata = driver.registerHandoff(published)
                                                           .get(HANDOFF_CONDITION_TIMEOUT, TimeUnit.MILLISECONDS);
 
@@ -189,11 +186,8 @@ public class AppenderatorDriverTest
         committerSupplier.get(),
         ImmutableList.of("dummy")
     ).get(PUBLISH_TIMEOUT, TimeUnit.MILLISECONDS);
-
-    while (driver.getSegments().containsKey("dummy")) {
-      Thread.sleep(100);
-    }
-
+    Assert.assertFalse(driver.getActiveSegments().containsKey("dummy"));
+    Assert.assertFalse(driver.getPublishPendingSegments().containsKey("dummy"));
     final SegmentsAndMetadata segmentsAndMetadata = driver.registerHandoff(published)
                                                           .get(HANDOFF_CONDITION_TIMEOUT, TimeUnit.MILLISECONDS);
     Assert.assertEquals(numSegments, segmentsAndMetadata.getSegments().size());
@@ -218,11 +212,8 @@ public class AppenderatorDriverTest
         committerSupplier.get(),
         ImmutableList.of("dummy")
     ).get(PUBLISH_TIMEOUT, TimeUnit.MILLISECONDS);
-
-    while (driver.getSegments().containsKey("dummy")) {
-      Thread.sleep(100);
-    }
-
+    Assert.assertFalse(driver.getActiveSegments().containsKey("dummy"));
+    Assert.assertFalse(driver.getPublishPendingSegments().containsKey("dummy"));
     driver.registerHandoff(published).get(HANDOFF_CONDITION_TIMEOUT, TimeUnit.MILLISECONDS);
   }
 
@@ -423,8 +414,7 @@ public class AppenderatorDriverTest
     public SegmentIdentifier allocate(
         final InputRow row,
         final String sequenceName,
-        final String previousSegmentId,
-        final boolean skipSegmentLineageCheck
+        final String previousSegmentId
     ) throws IOException
     {
       synchronized (counters) {

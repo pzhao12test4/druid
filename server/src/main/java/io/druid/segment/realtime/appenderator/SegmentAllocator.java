@@ -37,7 +37,6 @@ public interface SegmentAllocator
   SegmentIdentifier allocate(
       InputRow row,
       String sequenceName,
-      String previousSegmentId,
-      boolean skipSegmentLineageCheck
+      String previousSegmentId
   ) throws IOException;
 }

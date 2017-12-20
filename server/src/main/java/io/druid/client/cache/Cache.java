@@ -24,7 +24,6 @@ import com.google.common.primitives.Ints;
 import com.metamx.emitter.service.ServiceEmitter;
 import io.druid.java.util.common.StringUtils;
 
-import javax.annotation.Nullable;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Map;
@@ -33,7 +32,6 @@ import java.util.Map;
  */
 public interface Cache
 {
-  @Nullable
   byte[] get(NamedKey key);
   void put(NamedKey key, byte[] value);
 

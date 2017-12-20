@@ -20,7 +20,6 @@
 package io.druid.indexing.common.task;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import io.druid.indexing.common.TaskLock;
 import io.druid.indexing.common.TaskLockType;
 import io.druid.indexing.common.actions.LockTryAcquireAction;
@@ -65,20 +64,21 @@ public class Tasks
   public static SortedSet<Interval> computeCompactIntervals(SortedSet<Interval> intervals)
   {
     final SortedSet<Interval> compactIntervals = new TreeSet<>(Comparators.intervalsByStartThenEnd());
-    List<Interval> toBeAccumulated = new ArrayList<>();
+    List<Interval> toBeAccumulated = null;
     for (Interval interval : intervals) {
-      if (toBeAccumulated.size() == 0) {
+      if (toBeAccumulated == null) {
+        toBeAccumulated = new ArrayList<>();
         toBeAccumulated.add(interval);
       } else {
         if (toBeAccumulated.get(toBeAccumulated.size() - 1).abuts(interval)) {
           toBeAccumulated.add(interval);
         } else {
           compactIntervals.add(JodaUtils.umbrellaInterval(toBeAccumulated));
-          toBeAccumulated = Lists.newArrayList(interval);
+          toBeAccumulated = null;
         }
       }
     }
-    if (toBeAccumulated.size() > 0) {
+    if (toBeAccumulated != null) {
       compactIntervals.add(JodaUtils.umbrellaInterval(toBeAccumulated));
     }
     return compactIntervals;

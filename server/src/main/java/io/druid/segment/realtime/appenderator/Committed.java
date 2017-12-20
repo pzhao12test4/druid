@@ -83,14 +83,6 @@ public class Committed
     return new Committed(newHydrants, metadata);
   }
 
-  public Committed with(final Map<String, Integer> hydrantsToAdd)
-  {
-    final Map<String, Integer> newHydrants = Maps.newHashMap();
-    newHydrants.putAll(hydrants);
-    newHydrants.putAll(hydrantsToAdd);
-    return new Committed(newHydrants, metadata);
-  }
-
   @Override
   public boolean equals(Object o)
   {

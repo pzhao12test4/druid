@@ -20,26 +20,21 @@
 package io.druid.curator.announcement;
 
 import com.google.common.collect.Sets;
+import io.druid.java.util.common.concurrent.Execs;
 import io.druid.curator.CuratorTestBase;
 import io.druid.java.util.common.StringUtils;
-import io.druid.java.util.common.concurrent.Execs;
-import io.druid.java.util.common.logger.Logger;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.api.CuratorEvent;
 import org.apache.curator.framework.api.CuratorEventType;
 import org.apache.curator.framework.api.CuratorListener;
-import org.apache.curator.framework.api.transaction.CuratorOp;
-import org.apache.curator.framework.api.transaction.CuratorTransactionResult;
 import org.apache.curator.test.KillSession;
 import org.apache.curator.utils.ZKPaths;
-import org.apache.zookeeper.KeeperException.Code;
 import org.apache.zookeeper.data.Stat;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.util.Collection;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -48,7 +43,7 @@ import java.util.concurrent.ExecutorService;
  */
 public class AnnouncerTest extends CuratorTestBase
 {
-  private static final Logger log = new Logger(AnnouncerTest.class);
+
   private ExecutorService exec;
 
   @Before
@@ -70,7 +65,6 @@ public class AnnouncerTest extends CuratorTestBase
     curator.start();
     curator.blockUntilConnected();
     Announcer announcer = new Announcer(curator, exec);
-    announcer.initializeAddedChildren();
 
     final byte[] billy = StringUtils.toUtf8("billy");
     final String testPath1 = "/test1";
@@ -81,9 +75,6 @@ public class AnnouncerTest extends CuratorTestBase
     Assert.assertNull("/somewhere/test2 does not exists", curator.checkExists().forPath(testPath2));
 
     announcer.start();
-    while (!announcer.getAddedChildren().contains("/test1")) {
-      Thread.sleep(100);
-    }
 
     try {
       Assert.assertArrayEquals("/test1 has data", billy, curator.getData().decompressed().forPath(testPath1));
@@ -92,11 +83,7 @@ public class AnnouncerTest extends CuratorTestBase
       announcer.announce(testPath2, billy);
 
       Assert.assertArrayEquals("/test1 still has data", billy, curator.getData().decompressed().forPath(testPath1));
-      Assert.assertArrayEquals(
-          "/somewhere/test2 has data",
-          billy,
-          curator.getData().decompressed().forPath(testPath2)
-      );
+      Assert.assertArrayEquals("/somewhere/test2 has data", billy, curator.getData().decompressed().forPath(testPath2));
 
       final CountDownLatch latch = new CountDownLatch(1);
       curator.getCuratorListenable().addListener(
@@ -111,12 +98,7 @@ public class AnnouncerTest extends CuratorTestBase
             }
           }
       );
-      final CuratorOp deleteOp = curator.transactionOp().delete().forPath(testPath1);
-      final Collection<CuratorTransactionResult> results = curator.transaction().forOperations(deleteOp);
-      Assert.assertEquals(1, results.size());
-      final CuratorTransactionResult result = results.iterator().next();
-      Assert.assertEquals(Code.OK.intValue(), result.getError()); // assert delete
-
+      curator.inTransaction().delete().forPath(testPath1).and().commit();
       Assert.assertTrue("Wait for /test1 to be created", timing.forWaiting().awaitLatch(latch));
 
       Assert.assertArrayEquals(

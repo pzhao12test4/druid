@@ -46,8 +46,7 @@ public class ActionBasedSegmentAllocator implements SegmentAllocator
   public SegmentIdentifier allocate(
       final InputRow row,
       final String sequenceName,
-      final String previousSegmentId,
-      final boolean skipSegmentLineageCheck
+      final String previousSegmentId
   ) throws IOException
   {
     return taskActionClient.submit(
@@ -57,8 +56,7 @@ public class ActionBasedSegmentAllocator implements SegmentAllocator
             dataSchema.getGranularitySpec().getQueryGranularity(),
             dataSchema.getGranularitySpec().getSegmentGranularity(),
             sequenceName,
-            previousSegmentId,
-            skipSegmentLineageCheck
+            previousSegmentId
         )
     );
   }

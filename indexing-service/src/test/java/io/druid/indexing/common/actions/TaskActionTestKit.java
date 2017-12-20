@@ -19,7 +19,6 @@
 
 package io.druid.indexing.common.actions;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Suppliers;
 import io.druid.indexing.common.TestUtils;
 import io.druid.indexing.common.config.TaskStorageConfig;
@@ -29,11 +28,8 @@ import io.druid.indexing.overlord.TaskLockbox;
 import io.druid.indexing.overlord.TaskStorage;
 import io.druid.indexing.overlord.supervisor.SupervisorManager;
 import io.druid.metadata.IndexerSQLMetadataStorageCoordinator;
-import io.druid.metadata.MetadataSegmentManager;
-import io.druid.metadata.MetadataSegmentManagerConfig;
 import io.druid.metadata.MetadataStorageConnectorConfig;
 import io.druid.metadata.MetadataStorageTablesConfig;
-import io.druid.metadata.SQLMetadataSegmentManager;
 import io.druid.metadata.TestDerbyConnector;
 import io.druid.server.metrics.NoopServiceEmitter;
 import org.easymock.EasyMock;
@@ -48,7 +44,6 @@ public class TaskActionTestKit extends ExternalResource
   private TaskLockbox taskLockbox;
   private TestDerbyConnector testDerbyConnector;
   private IndexerMetadataStorageCoordinator metadataStorageCoordinator;
-  private MetadataSegmentManager metadataSegmentManager;
   private TaskActionToolbox taskActionToolbox;
 
   public MetadataStorageTablesConfig getMetadataStorageTablesConfig()
@@ -76,11 +71,6 @@ public class TaskActionTestKit extends ExternalResource
     return metadataStorageCoordinator;
   }
 
-  public MetadataSegmentManager getMetadataSegmentManager()
-  {
-    return metadataSegmentManager;
-  }
-
   public TaskActionToolbox getTaskActionToolbox()
   {
     return taskActionToolbox;
@@ -95,16 +85,9 @@ public class TaskActionTestKit extends ExternalResource
         Suppliers.ofInstance(new MetadataStorageConnectorConfig()),
         Suppliers.ofInstance(metadataStorageTablesConfig)
     );
-    final ObjectMapper objectMapper = new TestUtils().getTestObjectMapper();
     metadataStorageCoordinator = new IndexerSQLMetadataStorageCoordinator(
-        objectMapper,
+        new TestUtils().getTestObjectMapper(),
         metadataStorageTablesConfig,
-        testDerbyConnector
-    );
-    metadataSegmentManager = new SQLMetadataSegmentManager(
-        objectMapper,
-        Suppliers.ofInstance(new MetadataSegmentManagerConfig()),
-        Suppliers.ofInstance(metadataStorageTablesConfig),
         testDerbyConnector
     );
     taskActionToolbox = new TaskActionToolbox(
@@ -130,7 +113,6 @@ public class TaskActionTestKit extends ExternalResource
     taskLockbox = null;
     testDerbyConnector = null;
     metadataStorageCoordinator = null;
-    metadataSegmentManager = null;
     taskActionToolbox = null;
   }
 }
