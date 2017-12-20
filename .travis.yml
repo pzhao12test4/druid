@@ -29,12 +29,16 @@ jdk:
 language: java
 matrix:
   include:
-  - install: true
+  - env:
+    - NAME="strict compilation"
+    install: true
     script: echo "MAVEN_OPTS='-Xmx3000m'" > ~/.mavenrc && mvn clean -Pstrict -pl '!benchmarks'
       compile test-compile -B
     sudo: false
   - before_script:
     - unset _JAVA_OPTIONS
+    env:
+    - NAME="processing module test"
     install: echo "MAVEN_OPTS='-Xmx3000m'" > ~/.mavenrc && mvn install -q -ff -DskipTests
       -B
     script: echo "MAVEN_OPTS='-Xmx512m'" > ~/.mavenrc && mvn test -B -Pparallel-test
@@ -42,10 +46,20 @@ matrix:
     sudo: false
   - before_script:
     - unset _JAVA_OPTIONS
+    env:
+    - NAME="server module test"
+    install: echo "MAVEN_OPTS='-Xmx3000m'" > ~/.mavenrc && mvn install -q -ff -DskipTests
+      -B
+    script: echo "MAVEN_OPTS='-Xmx512m'" > ~/.mavenrc && mvn test -B -pl server
+    sudo: false
+  - before_script:
+    - unset _JAVA_OPTIONS
+    env:
+    - NAME="other modules test"
     install: echo "MAVEN_OPTS='-Xmx3000m'" > ~/.mavenrc && mvn install -q -ff -DskipTests
       -B
     script: echo "MAVEN_OPTS='-Xmx512m'" > ~/.mavenrc && mvn test -B -Pparallel-test
-      -Dmaven.fork.count=2 -pl '!processing'
+      -Dmaven.fork.count=2 -pl '!processing,!server'
     sudo: false
   - after_failure:
     - for v in ~/shared/logs/*.log ; do echo $v logtail ======================== ;
@@ -54,6 +68,7 @@ matrix:
       $v dmesg ======================== ; docker exec -it druid-$v sh -c 'dmesg |
       tail -3' ; done
     env:
+    - NAME="integration test"
     - DOCKER_IP=172.17.0.1
     install:
     - mvn install -q -ff -DskipTests -B
