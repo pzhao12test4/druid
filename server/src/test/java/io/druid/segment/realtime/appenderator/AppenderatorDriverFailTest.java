@@ -420,12 +420,6 @@ public class AppenderatorDriverFailTest
     }
 
     @Override
-    public void closeNow()
-    {
-
-    }
-
-    @Override
     public <T> QueryRunner<T> getQueryRunnerForIntervals(
         Query<T> query, Iterable<Interval> intervals
     )
